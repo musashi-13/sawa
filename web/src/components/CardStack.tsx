@@ -54,12 +54,28 @@ export function CardStack({
   const visible = tasks.slice(0, VISIBLE);
   const [command, setCommand] = useState<StackCommand | null>(null);
 
+  // The top card's drag position lives here (not inside the card) so the swipe
+  // indicators can sit STATICALLY beside the stack and react to it, rather than
+  // riding along on the card as it slides.
+  const x = useMotionValue(0);
+  const completeHint = useTransform(x, [25, 150], [0, 1]);
+  const postponeHint = useTransform(x, [-150, -25], [1, 0]);
+  const completeScale = useTransform(x, [25, 150], [0.65, 1]);
+  const postponeScale = useTransform(x, [-150, -25], [1, 0.65]);
+
+  const top = visible[0];
+  const failed = mode === "failed";
+
+  // Snap the shared drag value home whenever a new card reaches the top.
+  useEffect(() => {
+    x.set(0);
+  }, [top?.id, x]);
+
   useEffect(() => {
     if (!keyboardEnabled) return;
     function onKey(e: KeyboardEvent) {
       const tag = (document.activeElement?.tagName ?? "").toLowerCase();
       if (tag === "input" || tag === "textarea") return;
-      const top = visible[0];
       if (!top) return;
       const action = resolveAction(e);
       if (action === "complete") {
@@ -75,7 +91,7 @@ export function CardStack({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [keyboardEnabled, visible, onDelete]);
+  }, [keyboardEnabled, top, onDelete]);
 
   return (
     <div className="relative mx-auto h-[260px] w-full">
@@ -92,6 +108,7 @@ export function CardStack({
                 isTop={i === 0}
                 mode={mode}
                 command={command}
+                x={x}
                 onComplete={onComplete}
                 onPostpone={onPostpone}
                 onUnfold={onUnfold}
@@ -102,6 +119,49 @@ export function CardStack({
             .reverse()
         )}
       </AnimatePresence>
+
+      {/* Static swipe indicators — pinned to the sides of the stack, lit by the
+          top card's drag. They never move with the card. */}
+      {top && (
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 flex h-[185px] items-center justify-between px-2"
+          style={{ zIndex: 200 }}
+        >
+          {/* Left — postpone / discard */}
+          <motion.div
+            className="flex h-11 w-11 items-center justify-center rounded-full shadow-md"
+            style={{
+              opacity: postponeHint,
+              scale: postponeScale,
+              background: failed ? "#8A2D1C" : "#C96442",
+            }}
+          >
+            {failed ? (
+              <Trash2 size={22} className="text-white" />
+            ) : (
+              <CornerDownRight size={22} className="rotate-180 text-white" />
+            )}
+          </motion.div>
+
+          {/* Right — revive / unfold / complete */}
+          <motion.div
+            className="flex h-11 w-11 items-center justify-center rounded-full shadow-md"
+            style={{
+              opacity: completeHint,
+              scale: completeScale,
+              background: failed ? "#8C6B3A" : top.isBundle ? "#B8915A" : "#2C6E4F",
+            }}
+          >
+            {failed ? (
+              <RotateCcw size={24} className="text-[#F3E7D2]" />
+            ) : top.isBundle ? (
+              <Layers size={24} className="text-[#3E2E14]" />
+            ) : (
+              <Check size={24} className="text-white" />
+            )}
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
@@ -128,6 +188,8 @@ interface StackCardProps {
   isTop: boolean;
   mode: StackMode;
   command: StackCommand | null;
+  /** Shared drag position, owned by CardStack; only the top card drives it. */
+  x: MotionValue<number>;
   onComplete: (id: string) => void;
   onPostpone: (id: string) => void;
   onUnfold: (id: string) => void;
@@ -140,6 +202,7 @@ function StackCard({
   isTop,
   mode,
   command,
+  x,
   onComplete,
   onPostpone,
   onUnfold,
@@ -154,10 +217,7 @@ function StackCard({
   };
   // Left swipe: discard in the Failed bin, otherwise postpone.
   const leftAction = () => (failed ? onDelete(task.id) : onPostpone(task.id));
-  const x = useMotionValue(0);
   const rotate = useTransform(x, [-240, 240], [-7, 7]);
-  const completeHint = useTransform(x, [25, 150], [0, 1]);
-  const postponeHint = useTransform(x, [-150, -25], [1, 0]);
   // Fade as the card travels — so a long desktop fling dissolves, not just exits.
   const dragOpacity = useTransform(x, [-380, -90, 0, 90, 380], [0, 0.8, 1, 0.8, 0]);
   const [committing, setCommitting] = useState(false);
@@ -250,13 +310,7 @@ function StackCard({
       whileTap={isTop ? { cursor: "grabbing" } : undefined}
     >
       {isTop && (
-        <TaskCardContent
-          task={task}
-          failed={failed}
-          completeHint={completeHint}
-          postponeHint={postponeHint}
-          onDelete={() => onDelete(task.id)}
-        />
+        <TaskCardContent task={task} failed={failed} onDelete={() => onDelete(task.id)} />
       )}
     </motion.div>
   );
@@ -265,8 +319,6 @@ function StackCard({
 interface TaskCardContentProps {
   task: Task;
   failed: boolean;
-  completeHint: MotionValue<number>;
-  postponeHint: MotionValue<number>;
   onDelete: () => void;
 }
 
@@ -281,13 +333,7 @@ function missedLabel(deadline?: number): string {
   );
 }
 
-function TaskCardContent({
-  task,
-  failed,
-  completeHint,
-  postponeHint,
-  onDelete,
-}: TaskCardContentProps) {
+function TaskCardContent({ task, failed, onDelete }: TaskCardContentProps) {
   const childCount = task.childTitles?.length ?? 0;
   const accent = task.isBundle ? "#B8915A" : failed ? "#C0584A" : "#C96442";
   return (
@@ -314,66 +360,6 @@ function TaskCardContent({
       >
         沢
       </span>
-
-      {/* Directional wash — tints the whole card as you drag, so the pending
-          action reads clearly even when a thumb covers the side badge. Sits
-          above the paper texture (z1) but below the title text (z10). */}
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          zIndex: 1,
-          opacity: completeHint,
-          background: failed
-            ? "linear-gradient(270deg, rgba(140,107,58,0.34), transparent 62%)"
-            : task.isBundle
-              ? "linear-gradient(270deg, rgba(184,145,90,0.36), transparent 62%)"
-              : "linear-gradient(270deg, rgba(44,110,79,0.34), transparent 62%)",
-        }}
-      />
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          zIndex: 1,
-          opacity: postponeHint,
-          background: failed
-            ? "linear-gradient(90deg, rgba(138,45,28,0.34), transparent 62%)"
-            : "linear-gradient(90deg, rgba(201,100,66,0.32), transparent 62%)",
-        }}
-      />
-
-      {/* Right-swipe badge: revive (failed bin), unfold (bundle), or complete */}
-      <motion.div
-        className="pointer-events-none absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full shadow-md"
-        style={{
-          zIndex: 20,
-          opacity: completeHint,
-          background: failed ? "#8C6B3A" : task.isBundle ? "#B8915A" : "#2C6E4F",
-        }}
-      >
-        {failed ? (
-          <RotateCcw size={24} className="text-[#F3E7D2]" />
-        ) : task.isBundle ? (
-          <Layers size={24} className="text-[#3E2E14]" />
-        ) : (
-          <Check size={24} className="text-white" />
-        )}
-      </motion.div>
-      <motion.div
-        className="pointer-events-none absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full shadow-md"
-        style={{
-          zIndex: 20,
-          opacity: postponeHint,
-          background: failed ? "#8A2D1C" : "#C96442",
-        }}
-      >
-        {failed ? (
-          <Trash2 size={22} className="text-white" />
-        ) : (
-          <CornerDownRight size={22} className="rotate-180 text-white" />
-        )}
-      </motion.div>
 
       <button
         onClick={onDelete}
