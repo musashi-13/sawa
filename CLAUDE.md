@@ -133,8 +133,13 @@ See `web/MILESTONES.md`. Order: M2 Convex sync → M3 auth → M4 Slack integrat
 
 ## Working notes
 
-- First run seeds **empty** data (no sample tasks, streak 0); only 3 empty
-  contexts exist as structure. There is **no context create/rename/delete UI
-  yet** — a small feature to build when needed.
-- Deadlines are stored as end-of-day (23:59 local); failure triggers after that.
-  Adjust `isFailed` for a grace period if desired.
+- The named stacks are called **streams** (`TaskStream` / `streamId` in code;
+  the term "context" was renamed everywhere). First run seeds **empty** data (no
+  sample tasks, streak 0) with 3 default streams (Daily / Projects / Errands).
+- Streams are managed from the **Settings sheet** (gear in the TopBar): edit
+  display name, add / rename / drag-reorder / delete streams.
+- The user's display name is captured by a first-run modal and stored in
+  `SawaData.userName`.
+- Deadlines are a specific date+time (`datetime-local` in the add pane, stored as
+  epoch ms); a task fails once that moment passes. Adjust `isFailed` for a grace
+  period if desired.

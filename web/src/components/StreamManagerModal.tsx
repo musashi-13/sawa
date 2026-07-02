@@ -227,6 +227,9 @@ function StreamRow({
   // the text input would otherwise fight with selecting/editing the name.
   const controls = useDragControls();
   const inputRef = useRef<HTMLInputElement>(null);
+  // Raise the row being dragged above all others (Reorder doesn't do this on its
+  // own, so otherwise a neighbour paints over the one you're moving).
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     if (autoFocus && inputRef.current) {
@@ -241,6 +244,15 @@ function StreamRow({
       value={row}
       dragListener={false}
       dragControls={controls}
+      onDragStart={() => setDragging(true)}
+      onDragEnd={() => setDragging(false)}
+      style={{
+        position: "relative",
+        zIndex: dragging ? 50 : 0,
+        boxShadow: dragging
+          ? "0 12px 28px -10px rgba(20,14,8,0.7)"
+          : "none",
+      }}
       className="border-border-warm flex items-center gap-2 rounded-xl border bg-bg px-2.5 py-2"
     >
       <button

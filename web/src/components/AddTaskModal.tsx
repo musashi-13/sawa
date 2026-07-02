@@ -11,10 +11,12 @@ interface AddTaskModalProps {
   onSave: (input: NewTaskInput, isBundle: boolean) => void;
 }
 
-function toEpoch(dateStr: string): number | undefined {
-  if (!dateStr) return undefined;
-  const [y, m, d] = dateStr.split("-").map(Number);
-  return new Date(y, m - 1, d, 23, 59, 59).getTime();
+// `datetime-local` gives a value like "2026-07-02T15:30" with no timezone, which
+// `new Date(...)` correctly reads as local time.
+function toEpoch(value: string): number | undefined {
+  if (!value) return undefined;
+  const ms = new Date(value).getTime();
+  return Number.isNaN(ms) ? undefined : ms;
 }
 
 export function AddTaskModal({ open, mode, onClose, onSave }: AddTaskModalProps) {
@@ -47,8 +49,9 @@ export function AddTaskModal({ open, mode, onClose, onSave }: AddTaskModalProps)
     onClose();
   }
 
+  // 16px avoids iOS Safari's auto-zoom on focus.
   const inputClass =
-    "w-full rounded-xl border border-border-warm bg-bg px-3.5 py-2.5 text-[15px] text-cream placeholder:text-muted-soft outline-none focus:border-clay/60";
+    "w-full rounded-xl border border-border-warm bg-bg px-3.5 py-2.5 text-[16px] text-cream placeholder:text-muted-soft outline-none focus:border-clay/60";
 
   return (
     <AnimatePresence>
@@ -126,8 +129,11 @@ export function AddTaskModal({ open, mode, onClose, onSave }: AddTaskModalProps)
               <label className="text-muted block text-[12px]">
                 Deadline (optional)
                 <input
-                  type="date"
-                  className={`${inputClass} mt-1.5`}
+                  type="datetime-local"
+                  // iOS clips the value in date/time inputs unless the internal
+                  // value box is given room + left-aligned; min-height + the
+                  // ::-webkit-date-and-time-value tweaks fix the crop.
+                  className={`${inputClass} mt-1.5 block min-h-[48px] appearance-none [&::-webkit-date-and-time-value]:m-0 [&::-webkit-date-and-time-value]:text-left`}
                   value={deadline}
                   onChange={(e) => setDeadline(e.target.value)}
                 />

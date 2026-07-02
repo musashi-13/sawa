@@ -117,6 +117,9 @@ export default function App() {
 
           <div className="mt-7 flex flex-col gap-6">
             <CardStack
+              // Remount per stream so switching tears down the old stack cleanly
+              // instead of cross-fading old + new cards (which left a blank card).
+              key={activeStream?.id ?? "failed"}
               tasks={activeTasks}
               mode={isFailedView ? "failed" : "stack"}
               keyboardEnabled={!overlayOpen}

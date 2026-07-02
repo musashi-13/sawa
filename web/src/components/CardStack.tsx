@@ -222,7 +222,7 @@ function StackCard({
         transformOrigin: "bottom center",
         zIndex: 100 - depth,
         background: isParchment
-          ? "linear-gradient(158deg,#F1ECDE 0%,#E8DFCC 55%,#DFD4BD 100%)"
+          ? "linear-gradient(158deg,#E6DDC9 0%,#DBD0B6 55%,#CDC0A3 100%)"
           : back,
         border: task.isBundle && isParchment
           ? "1px solid #D8C9A8"
@@ -315,30 +315,63 @@ function TaskCardContent({
         沢
       </span>
 
-      {/* Right-swipe hint: revive (failed bin), unfold (bundle), or complete */}
+      {/* Directional wash — tints the whole card as you drag, so the pending
+          action reads clearly even when a thumb covers the side badge. Sits
+          above the paper texture (z1) but below the title text (z10). */}
       <motion.div
-        className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-2"
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
         style={{
+          zIndex: 1,
           opacity: completeHint,
-          background: failed ? "#E6D8C6" : task.isBundle ? "#E4D5B6" : "#CFE3D6",
+          background: failed
+            ? "linear-gradient(270deg, rgba(140,107,58,0.34), transparent 62%)"
+            : task.isBundle
+              ? "linear-gradient(270deg, rgba(184,145,90,0.36), transparent 62%)"
+              : "linear-gradient(270deg, rgba(44,110,79,0.34), transparent 62%)",
+        }}
+      />
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          zIndex: 1,
+          opacity: postponeHint,
+          background: failed
+            ? "linear-gradient(90deg, rgba(138,45,28,0.34), transparent 62%)"
+            : "linear-gradient(90deg, rgba(201,100,66,0.32), transparent 62%)",
+        }}
+      />
+
+      {/* Right-swipe badge: revive (failed bin), unfold (bundle), or complete */}
+      <motion.div
+        className="pointer-events-none absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full shadow-md"
+        style={{
+          zIndex: 20,
+          opacity: completeHint,
+          background: failed ? "#8C6B3A" : task.isBundle ? "#B8915A" : "#2C6E4F",
         }}
       >
         {failed ? (
-          <RotateCcw size={22} className="text-[#8C6B3A]" />
+          <RotateCcw size={24} className="text-[#F3E7D2]" />
         ) : task.isBundle ? (
-          <Layers size={22} className="text-[#8C6B3A]" />
+          <Layers size={24} className="text-[#3E2E14]" />
         ) : (
-          <Check size={22} className="text-[#2C6E4F]" />
+          <Check size={24} className="text-white" />
         )}
       </motion.div>
       <motion.div
-        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 rounded-full p-2"
-        style={{ opacity: postponeHint, background: failed ? "#E9C7C0" : "#E6D8C6" }}
+        className="pointer-events-none absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full shadow-md"
+        style={{
+          zIndex: 20,
+          opacity: postponeHint,
+          background: failed ? "#8A2D1C" : "#C96442",
+        }}
       >
         {failed ? (
-          <Trash2 size={22} className="text-[#8A2D1C]" />
+          <Trash2 size={22} className="text-white" />
         ) : (
-          <CornerDownRight size={22} className="rotate-180 text-[#8C7A55]" />
+          <CornerDownRight size={22} className="rotate-180 text-white" />
         )}
       </motion.div>
 
