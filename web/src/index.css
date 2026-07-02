@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #1e1c1a;
+  --color-bg-soft: #26231f;
+  --color-border-warm: #3a352f;
+  --color-parchment: #eae3d3;
+  --color-parchment-edge: #d8c9a8;
+  --color-ink: #2b2722;
+  --color-clay: #c96442;
+  --color-clay-deep: #9c4a2c;
+  --color-gold: #b8915a;
+  --color-gold-deep: #8c6b3a;
+  --color-cream: #e9e2d3;
+  --color-cream-soft: #c7bca8;
+  --color-muted: #8c8270;
+  --color-muted-soft: #7e7563;
+
+  --font-serif: "Spectral", "Iowan Old Style", Georgia, "Times New Roman", serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-cream);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+/* Prevent text selection flicker while dragging cards */
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}

@@ -1,0 +1,13 @@
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Dependency + build output (also covered per-package)
+node_modules/
+dist/
+dev-dist/
+*.tsbuildinfo
+*.local
