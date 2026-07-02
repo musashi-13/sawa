@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
-interface ContextSwitcherProps {
+interface StreamSwitcherProps {
   name: string;
   count: number;
   index: number;
@@ -10,18 +10,18 @@ interface ContextSwitcherProps {
   onNext: () => void;
 }
 
-export function ContextSwitcher({
+export function StreamSwitcher({
   name,
   count,
   index,
   failedDotIndex,
   onPrev,
   onNext,
-}: ContextSwitcherProps) {
+}: StreamSwitcherProps) {
   return (
     <div className="flex items-center justify-center gap-5">
       <button
-        aria-label="Previous context"
+        aria-label="Previous stream"
         onClick={onPrev}
         className="text-muted transition-transform active:scale-90"
       >
@@ -53,7 +53,7 @@ export function ContextSwitcher({
       </div>
 
       <button
-        aria-label="Next context"
+        aria-label="Next stream"
         onClick={onNext}
         className="text-muted transition-transform active:scale-90"
       >

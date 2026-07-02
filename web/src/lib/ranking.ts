@@ -5,7 +5,7 @@ import { daysUntil, now } from "./util";
 // Ranking — the "what should I do right now" algorithm.
 //
 // This is the seam Karan owns. The contract: given the active (incomplete)
-// tasks for a context, return them ordered so index 0 is the strongest
+// tasks for a stream, return them ordered so index 0 is the strongest
 // recommendation (top of the stack). There is intentionally NO fixed ordering
 // imposed by the user — order emerges purely from urgency + postpones, so the
 // stack always surfaces something doable now.

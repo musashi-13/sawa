@@ -66,8 +66,28 @@ Open questions: per-context channel routing? Team/shared contexts, or personal o
   SDK), reusing the data model and ranking rules. Brings back the original
   tripled-sensory feel (animation + haptics + sound) on device.
 
+## M8 — Android app  ⬅ priority after iOS
+
+A first-class **native** Android client — not a stretched SwiftUI build. SwiftUI
+does not run on Android, so this is its own client sharing the **backend**, not
+UI code (same principle that makes iOS work: Convex is the shared layer, not the
+language).
+
+- **Stack:** Kotlin + Jetpack Compose against the **same Convex backend**,
+  reusing the data model, ranking rules, and entitlements.
+- **Parity target:** the card-stack + swipe feel, contexts, bundles, Failed bin,
+  and the tripled-sensory feel (animation + haptics + sound) — matched to
+  Android idioms, not copied pixel-for-pixel from iOS.
+- **Interim:** the installable **PWA** is already the Android story today; this
+  milestone upgrades that to a native app once iOS ships.
+- Open question: how much non-UI logic (ranking, sync client) is worth sharing
+  cross-platform vs. reimplementing natively per client.
+
 ---
 
 ### Notes
 - Slack work is intentionally parked behind sync + auth; building it before a
   backend would mean throwaway plumbing.
+- Android is native (Kotlin/Compose), not Swift: SwiftUI is Apple-only. The
+  shared layer across web/iOS/Android is the Convex backend, per the
+  "no cross-platform frameworks" rule in CLAUDE.md.

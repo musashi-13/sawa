@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { SawaData, Task } from "../types";
+import type { SawaData, Task, TaskStream } from "../types";
 import { store } from "../store/store";
 import { dayKey, now, uuid } from "../lib/util";
 import { isFailed, rankTasks } from "../lib/ranking";
@@ -17,18 +17,18 @@ export interface NewTaskInput {
   childTitles?: string[];
 }
 
-/** A switcher entry — a real context, or the synthetic Failed bin. */
+/** A switcher entry — a real stream, or the synthetic Failed bin. */
 export interface SwitcherView {
   id: string;
   name: string;
-  kind: "context" | "failed";
+  kind: "stream" | "failed";
 }
 
 export const FAILED_VIEW_ID = "__failed__";
 
 export function useSawa() {
   const [data, setData] = useState<SawaData>(() => store.load());
-  const [contextIndex, setContextIndex] = useState(0);
+  const [streamIndex, setStreamIndex] = useState(0);
   const [, setTick] = useState(0);
 
   // React to external updates (other tabs today; sync engine later).
@@ -41,23 +41,23 @@ export function useSawa() {
   }, []);
 
   const t0 = Date.now();
-  const contexts = [...data.contexts].sort((a, b) => a.order - b.order);
+  const streams = [...data.streams].sort((a, b) => a.order - b.order);
   const failedAll = data.tasks.filter((t) => isFailed(t, t0));
 
   const views: SwitcherView[] = [
-    ...contexts.map((c) => ({ id: c.id, name: c.name, kind: "context" as const })),
+    ...streams.map((s) => ({ id: s.id, name: s.name, kind: "stream" as const })),
     ...(failedAll.length > 0
       ? [{ id: FAILED_VIEW_ID, name: "Failed", kind: "failed" as const }]
       : []),
   ];
   const viewCount = views.length;
   const safeIndex = viewCount
-    ? ((contextIndex % viewCount) + viewCount) % viewCount
+    ? ((streamIndex % viewCount) + viewCount) % viewCount
     : 0;
   const activeView = views[safeIndex];
   const isFailedView = activeView?.kind === "failed";
-  const activeContext = !isFailedView
-    ? contexts.find((c) => c.id === activeView?.id)
+  const activeStream = !isFailedView
+    ? streams.find((s) => s.id === activeView?.id)
     : undefined;
   const failedDotIndex = failedAll.length > 0 ? viewCount - 1 : -1;
 
@@ -126,7 +126,7 @@ export function useSawa() {
         const t = now();
         const children: Task[] = (bundle.childTitles ?? []).map((title) => ({
           id: uuid(),
-          contextId: bundle.contextId,
+          streamId: bundle.streamId,
           title,
           isBundle: false,
           parentTitle: bundle.title,
@@ -143,13 +143,20 @@ export function useSawa() {
     [mutate],
   );
 
+  /** Set (or change) the user's display name; ignores an empty value. */
+  const setUserName = useCallback(
+    (name: string) =>
+      mutate((d) => ({ ...d, userName: name.trim() || d.userName })),
+    [mutate],
+  );
+
   const addTask = useCallback(
-    (contextId: string, input: NewTaskInput, isBundle = false) =>
+    (streamId: string, input: NewTaskInput, isBundle = false) =>
       mutate((d) => {
         const t = now();
         const task: Task = {
           id: uuid(),
-          contextId,
+          streamId,
           title: input.title.trim(),
           description: input.description?.trim() || undefined,
           isBundle,
@@ -166,48 +173,116 @@ export function useSawa() {
     [mutate],
   );
 
-  const nextContext = useCallback(
-    () => setContextIndex((i) => (i + 1) % Math.max(viewCount, 1)),
+  const nextStream = useCallback(
+    () => setStreamIndex((i) => (i + 1) % Math.max(viewCount, 1)),
     [viewCount],
   );
-  const prevContext = useCallback(
-    () => setContextIndex((i) => (i - 1 + viewCount) % Math.max(viewCount, 1)),
+  const prevStream = useCallback(
+    () => setStreamIndex((i) => (i - 1 + viewCount) % Math.max(viewCount, 1)),
     [viewCount],
   );
 
-  /** Move the active context earlier (-1) or later (+1), keeping it active. */
-  const moveActiveContext = useCallback(
+  /** Move the active stream earlier (-1) or later (+1), keeping it active. */
+  const moveActiveStream = useCallback(
     (dir: -1 | 1) => {
       if (isFailedView) return;
       const idx = safeIndex;
       const swap = idx + dir;
-      if (swap < 0 || swap >= contexts.length) return;
-      const a = contexts[idx];
-      const b = contexts[swap];
+      if (swap < 0 || swap >= streams.length) return;
+      const a = streams[idx];
+      const b = streams[swap];
       mutate((d) => {
         const t = now();
         return {
           ...d,
-          contexts: d.contexts.map((c) => {
-            if (c.id === a.id) return { ...c, order: b.order, updatedAt: t };
-            if (c.id === b.id) return { ...c, order: a.order, updatedAt: t };
-            return c;
+          streams: d.streams.map((s) => {
+            if (s.id === a.id) return { ...s, order: b.order, updatedAt: t };
+            if (s.id === b.id) return { ...s, order: a.order, updatedAt: t };
+            return s;
           }),
         };
       });
-      setContextIndex(swap);
+      setStreamIndex(swap);
     },
-    [contexts, safeIndex, isFailedView, mutate],
+    [streams, safeIndex, isFailedView, mutate],
   );
 
-  // Active list: the Failed bin (most-recently-missed first) or a ranked context.
+  /**
+   * Append a new stream after the last one. Returns the generated id (created
+   * here, in the hook layer) so the caller can reference the new stream
+   * immediately — e.g. to focus its name field for renaming.
+   */
+  const addStream = useCallback(
+    (name = "New stream"): string => {
+      const id = uuid();
+      mutate((d) => {
+        const t = now();
+        const maxOrder = d.streams.reduce((m, s) => Math.max(m, s.order), -1);
+        const stream: TaskStream = {
+          id,
+          name: name.trim() || "New stream",
+          order: maxOrder + 1,
+          createdAt: t,
+          updatedAt: t,
+        };
+        return { ...d, streams: [...d.streams, stream] };
+      });
+      return id;
+    },
+    [mutate],
+  );
+
+  const renameStream = useCallback(
+    (id: string, name: string) =>
+      mutate((d) => ({
+        ...d,
+        streams: d.streams.map((s) =>
+          s.id === id
+            ? { ...s, name: name.trim() || s.name, updatedAt: now() }
+            : s,
+        ),
+      })),
+    [mutate],
+  );
+
+  /** Delete a stream and all its tasks. Refuses to remove the last stream. */
+  const deleteStream = useCallback(
+    (id: string) =>
+      mutate((d) => {
+        if (d.streams.length <= 1) return d;
+        return {
+          ...d,
+          streams: d.streams.filter((s) => s.id !== id),
+          tasks: d.tasks.filter((t) => t.streamId !== id),
+        };
+      }),
+    [mutate],
+  );
+
+  /** Reassign `order` to match the given id sequence (drag-and-drop reorder). */
+  const reorderStreams = useCallback(
+    (orderedIds: string[]) =>
+      mutate((d) => {
+        const t = now();
+        const rank = new Map(orderedIds.map((id, i) => [id, i]));
+        return {
+          ...d,
+          streams: d.streams.map((s) =>
+            rank.has(s.id) ? { ...s, order: rank.get(s.id)!, updatedAt: t } : s,
+          ),
+        };
+      }),
+    [mutate],
+  );
+
+  // Active list: the Failed bin (most-recently-missed first) or a ranked stream.
   const activeTasks: Task[] = isFailedView
     ? [...failedAll].sort((a, b) => (b.deadline ?? 0) - (a.deadline ?? 0))
-    : activeContext
+    : activeStream
       ? rankTasks(
           data.tasks.filter(
             (t) =>
-              t.contextId === activeContext.id &&
+              t.streamId === activeStream.id &&
               t.completedAt === undefined &&
               !isFailed(t, t0),
           ),
@@ -215,20 +290,20 @@ export function useSawa() {
       : [];
 
   // Counts for the active view.
-  const contextTasks = activeContext
-    ? data.tasks.filter((t) => t.contextId === activeContext.id)
+  const streamTasks = activeStream
+    ? data.tasks.filter((t) => t.streamId === activeStream.id)
     : [];
   const today = dayKey();
   const leftCount = isFailedView
     ? failedAll.length
-    : contextTasks.filter((t) => t.completedAt === undefined && !isFailed(t, t0))
+    : streamTasks.filter((t) => t.completedAt === undefined && !isFailed(t, t0))
         .length;
   const failedCount = isFailedView
     ? failedAll.length
-    : contextTasks.filter((t) => isFailed(t, t0)).length;
+    : streamTasks.filter((t) => isFailed(t, t0)).length;
   const completedToday = isFailedView
     ? 0
-    : contextTasks.filter(
+    : streamTasks.filter(
         (t) => t.completedAt !== undefined && dayKey(t.completedAt) === today,
       ).length;
 
@@ -236,13 +311,14 @@ export function useSawa() {
 
   return {
     data,
-    contexts,
+    userName: data.userName,
+    streams,
     views,
-    activeContext,
+    activeStream,
     activeViewName: activeView?.name ?? "—",
     isFailedView,
     viewCount,
-    contextIndex: safeIndex,
+    streamIndex: safeIndex,
     failedDotIndex,
     activeTasks,
     leftCount,
@@ -256,9 +332,14 @@ export function useSawa() {
       revive,
       unfoldBundle,
       addTask,
-      nextContext,
-      prevContext,
-      moveActiveContext,
+      nextStream,
+      prevStream,
+      moveActiveStream,
+      addStream,
+      renameStream,
+      deleteStream,
+      reorderStreams,
+      setUserName,
     },
   };
 }

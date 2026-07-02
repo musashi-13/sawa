@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Layers, Plus, X } from "lucide-react";
 import type { NewTaskInput } from "../hooks/useSawa";
+import { useKeyboardInset } from "../hooks/useKeyboardInset";
 
 interface AddTaskModalProps {
   open: boolean;
@@ -17,6 +18,7 @@ function toEpoch(dateStr: string): number | undefined {
 }
 
 export function AddTaskModal({ open, mode, onClose, onSave }: AddTaskModalProps) {
+  const keyboardInset = useKeyboardInset();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [deadline, setDeadline] = useState("");
@@ -57,10 +59,14 @@ export function AddTaskModal({ open, mode, onClose, onSave }: AddTaskModalProps)
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
-          style={{ background: "rgba(10,9,8,0.6)" }}
+          style={{
+            background: "rgba(10,9,8,0.6)",
+            paddingBottom: keyboardInset,
+            transition: "padding-bottom 0.2s ease",
+          }}
         >
           <motion.div
-            className="border-border-warm w-full max-w-[420px] rounded-t-3xl border bg-[#211e1b] p-5 sm:rounded-3xl"
+            className="border-border-warm max-h-full w-full max-w-[420px] overflow-y-auto rounded-t-3xl border bg-[#211e1b] p-5 sm:rounded-3xl"
             initial={{ y: 40, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 40, opacity: 0 }}
@@ -79,6 +85,8 @@ export function AddTaskModal({ open, mode, onClose, onSave }: AddTaskModalProps)
             <div className="space-y-3">
               <input
                 autoFocus
+                autoComplete="off"
+                autoCorrect="off"
                 className={inputClass}
                 placeholder={bundle ? "Bundle title" : "What needs doing?"}
                 value={title}

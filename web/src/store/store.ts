@@ -17,7 +17,8 @@ export interface Store {
   subscribe(fn: (data: SawaData) => void): () => void;
 }
 
-const KEY = "sawa.data.v2";
+// Bumped v2 → v3 on the "context" → "stream" rename to reset any old-shape data.
+const KEY = "sawa.data.v3";
 
 export class LocalStore implements Store {
   private listeners = new Set<(data: SawaData) => void>();

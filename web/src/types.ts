@@ -6,10 +6,10 @@
 
 export type ID = string;
 
-export interface TaskContext {
+export interface TaskStream {
   id: ID;
   name: string;
-  /** Display order of the context in the bottom switcher. */
+  /** Display order of the stream in the bottom switcher. */
   order: number;
   createdAt: number;
   updatedAt: number;
@@ -17,7 +17,7 @@ export interface TaskContext {
 
 export interface Task {
   id: ID;
-  contextId: ID;
+  streamId: ID;
   title: string;
 
   /** Optional short description shown under the title on the card. */
@@ -58,9 +58,15 @@ export interface Task {
 export type CompletionDay = string;
 
 export interface SawaData {
-  contexts: TaskContext[];
+  streams: TaskStream[];
   tasks: Task[];
   /** Sorted ascending list of days with >=1 completion, for streaks. */
   completionDays: CompletionDay[];
+  /**
+   * The user's preferred display name, captured by a first-run prompt when
+   * absent. Stored here (not a stray localStorage key) so it rides the same
+   * persistence + future sync path as the rest of the data.
+   */
+  userName?: string;
   version: number;
 }

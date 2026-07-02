@@ -1,24 +1,26 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSawa, type NewTaskInput } from "./hooks/useSawa";
 import { InkWash } from "./components/InkWash";
 import { TopBar } from "./components/TopBar";
 import { CardStack } from "./components/CardStack";
-import { ContextSwitcher } from "./components/ContextSwitcher";
+import { StreamSwitcher } from "./components/StreamSwitcher";
 import { AddBar } from "./components/AddBar";
 import { AddTaskModal } from "./components/AddTaskModal";
+import { StreamManagerModal } from "./components/StreamManagerModal";
+import { NameModal } from "./components/NameModal";
 import { KeyboardHelp } from "./components/KeyboardHelp";
 import { resolveAction } from "./lib/keymap";
 
-const USER_NAME = "Karan";
-
 export default function App() {
   const {
-    contexts,
-    activeContext,
+    data,
+    userName,
+    streams,
+    activeStream,
     activeViewName,
     isFailedView,
     viewCount,
-    contextIndex,
+    streamIndex,
     failedDotIndex,
     activeTasks,
     leftCount,
@@ -33,9 +35,19 @@ export default function App() {
     mode: "task",
   });
   const [help, setHelp] = useState(false);
+  const [manage, setManage] = useState(false);
 
-  const overlayOpen = modal.open || help;
-  const { nextContext, prevContext, moveActiveContext } = actions;
+  // No name stored yet → block the app behind the first-run name prompt.
+  const needsName = !userName;
+  const overlayOpen = modal.open || help || manage || needsName;
+  const { nextStream, prevStream, moveActiveStream } = actions;
+
+  // Task count per stream, for the manage sheet's delete confirmation.
+  const taskCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const t of data.tasks) counts[t.streamId] = (counts[t.streamId] ?? 0) + 1;
+    return counts;
+  }, [data.tasks]);
 
   // App-level shortcuts. Card actions (complete/postpone/delete) live in CardStack.
   useEffect(() => {
@@ -47,9 +59,10 @@ export default function App() {
       if (action === "close") {
         setModal((m) => ({ ...m, open: false }));
         setHelp(false);
+        setManage(false);
         return;
       }
-      if (modal.open) return;
+      if (modal.open || manage || needsName) return;
 
       switch (action) {
         case "addTask": // let a focused button handle its own Space
@@ -57,17 +70,17 @@ export default function App() {
           e.preventDefault();
           setModal({ open: true, mode: "task" });
           break;
-        case "prevContext":
-          prevContext();
+        case "prevStream":
+          prevStream();
           break;
-        case "nextContext":
-          nextContext();
+        case "nextStream":
+          nextStream();
           break;
-        case "moveContextEarlier":
-          moveActiveContext(-1);
+        case "moveStreamEarlier":
+          moveActiveStream(-1);
           break;
-        case "moveContextLater":
-          moveActiveContext(1);
+        case "moveStreamLater":
+          moveActiveStream(1);
           break;
         case "toggleHelp":
           setHelp((h) => !h);
@@ -76,10 +89,10 @@ export default function App() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [modal.open, prevContext, nextContext, moveActiveContext]);
+  }, [modal.open, manage, needsName, prevStream, nextStream, moveActiveStream]);
 
   function handleSave(input: NewTaskInput, isBundle: boolean) {
-    const targetId = activeContext?.id ?? contexts[0]?.id;
+    const targetId = activeStream?.id ?? streams[0]?.id;
     if (!targetId) return;
     actions.addTask(targetId, input, isBundle);
   }
@@ -93,12 +106,13 @@ export default function App() {
       <div className="relative z-10 flex min-h-dvh items-center justify-center px-5 py-8">
         <main className="flex w-full max-w-[400px] origin-center flex-col md:scale-[1.08] lg:scale-[1.2]">
           <TopBar
-            name={USER_NAME}
+            name={userName ?? ""}
             streak={streak}
             leftCount={leftCount}
             completedToday={completedToday}
             failedCount={failedCount}
             failedView={isFailedView}
+            onManageStreams={() => setManage(true)}
           />
 
           <div className="mt-7 flex flex-col gap-6">
@@ -112,13 +126,13 @@ export default function App() {
               onDelete={actions.remove}
             />
 
-            <ContextSwitcher
+            <StreamSwitcher
               name={activeViewName}
               count={viewCount}
-              index={contextIndex}
+              index={streamIndex}
               failedDotIndex={failedDotIndex}
-              onPrev={actions.prevContext}
-              onNext={actions.nextContext}
+              onPrev={actions.prevStream}
+              onNext={actions.nextStream}
             />
           </div>
 
@@ -144,7 +158,20 @@ export default function App() {
         onClose={() => setModal((m) => ({ ...m, open: false }))}
         onSave={handleSave}
       />
+      <StreamManagerModal
+        open={manage}
+        userName={userName ?? ""}
+        streams={streams}
+        taskCounts={taskCounts}
+        onClose={() => setManage(false)}
+        onRenameUser={actions.setUserName}
+        onAdd={actions.addStream}
+        onRename={actions.renameStream}
+        onDelete={actions.deleteStream}
+        onReorder={actions.reorderStreams}
+      />
       <KeyboardHelp open={help} onClose={() => setHelp(false)} />
+      <NameModal open={needsName} onSave={actions.setUserName} />
     </div>
   );
 }

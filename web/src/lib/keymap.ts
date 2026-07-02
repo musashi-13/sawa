@@ -18,10 +18,10 @@ export type ActionId =
   | "complete"
   | "postpone"
   | "delete"
-  | "prevContext"
-  | "nextContext"
-  | "moveContextEarlier"
-  | "moveContextLater"
+  | "prevStream"
+  | "nextStream"
+  | "moveStreamEarlier"
+  | "moveStreamLater"
   | "addTask"
   | "makeBundle"
   | "addItem"
@@ -56,19 +56,19 @@ export const DEFAULT_KEYMAP: KeyBinding[] = [
     display: "⌫  or  X",
     help: "Delete top card",
   },
-  { action: "prevContext", keys: ["q"], display: "Q", help: "Previous context" },
-  { action: "nextContext", keys: ["e"], display: "E", help: "Next context" },
+  { action: "prevStream", keys: ["q"], display: "Q", help: "Previous stream" },
+  { action: "nextStream", keys: ["e"], display: "E", help: "Next stream" },
   {
-    action: "moveContextEarlier",
+    action: "moveStreamEarlier",
     keys: ["Q"],
     display: "⇧Q",
-    help: "Move context earlier",
+    help: "Move stream earlier",
   },
   {
-    action: "moveContextLater",
+    action: "moveStreamLater",
     keys: ["E"],
     display: "⇧E",
-    help: "Move context later",
+    help: "Move stream later",
   },
   { action: "addTask", keys: [" "], display: "Space", help: "Open the add pane" },
   {
