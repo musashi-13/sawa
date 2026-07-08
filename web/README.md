@@ -53,10 +53,13 @@ src/
 
 ## Where the day-planning logic lives
 
-`src/lib/ranking.ts` decides stack order purely from deadline urgency and
-postpone count — no fixed ordering between tasks. Tune `scoreTask` / the
-weights to change how aggressively deadlines surface. The UI only depends on
-`rankTasks`, so you can rewrite the scoring freely.
+`src/lib/queue.ts` decides stack order. `scoreTask` blends deadline urgency
+(sharpened by effort into least-slack-time), a decaying postpone penalty,
+anti-starvation aging, a quick-win bias, an importance boost, and a slight
+bundle demotion — no manually fixed ordering. Tune `DEFAULT_QUEUE_WEIGHTS` to
+change how aggressively each signal surfaces. `reindex` writes the result into a
+persisted, synced `order` on each task; the UI only reads `order`
+(`orderedByQueue`), so you can rewrite the scoring freely.
 
 ## Moving to cross-device sync later
 

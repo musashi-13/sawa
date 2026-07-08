@@ -1,8 +1,15 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Layers, Plus, X } from "lucide-react";
+import { Layers, Plus, Star, X } from "lucide-react";
 import type { NewTaskInput } from "../hooks/useSawa";
+import type { Effort } from "../types";
 import { useKeyboardInset } from "../hooks/useKeyboardInset";
+
+const EFFORTS: { value: Effort; label: string; hint: string }[] = [
+  { value: "S", label: "S", hint: "Small — a quick win" },
+  { value: "M", label: "M", hint: "Medium" },
+  { value: "L", label: "L", hint: "Large — a longer haul" },
+];
 
 interface AddTaskModalProps {
   open: boolean;
@@ -26,6 +33,8 @@ export function AddTaskModal({ open, mode, onClose, onSave }: AddTaskModalProps)
   const [deadline, setDeadline] = useState("");
   const [children, setChildren] = useState<string[]>(["", ""]);
   const [bundle, setBundle] = useState(false);
+  const [effort, setEffort] = useState<Effort | undefined>(undefined);
+  const [important, setImportant] = useState(false);
 
   // Reset each time the pane opens; honour how it was opened (task vs bundle).
   useEffect(() => {
@@ -35,6 +44,8 @@ export function AddTaskModal({ open, mode, onClose, onSave }: AddTaskModalProps)
       setDescription("");
       setDeadline("");
       setChildren(["", ""]);
+      setEffort(undefined);
+      setImportant(false);
     }
   }, [open, mode]);
 
@@ -43,7 +54,7 @@ export function AddTaskModal({ open, mode, onClose, onSave }: AddTaskModalProps)
     const childTitles = children.map((c) => c.trim()).filter(Boolean);
     if (bundle && childTitles.length === 0) return;
     onSave(
-      { title, description, deadline: toEpoch(deadline), childTitles },
+      { title, description, deadline: toEpoch(deadline), childTitles, effort, important },
       bundle,
     );
     onClose();
@@ -138,6 +149,59 @@ export function AddTaskModal({ open, mode, onClose, onSave }: AddTaskModalProps)
                   onChange={(e) => setDeadline(e.target.value)}
                 />
               </label>
+
+              {/* Effort + importance — the two ranking signals. */}
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <span className="text-muted mb-1.5 block text-[12px]">
+                    Effort (optional)
+                  </span>
+                  <div className="flex gap-1.5">
+                    {EFFORTS.map((e) => {
+                      const on = effort === e.value;
+                      return (
+                        <button
+                          key={e.value}
+                          type="button"
+                          title={e.hint}
+                          aria-pressed={on}
+                          onClick={() =>
+                            setEffort((cur) => (cur === e.value ? undefined : e.value))
+                          }
+                          className="flex-1 rounded-xl border py-2.5 text-[14px] font-medium transition-colors"
+                          style={{
+                            background: on ? "#2c2a22" : "transparent",
+                            borderColor: on ? "#8C6B3A" : "#3a352f",
+                            color: on ? "#d9b877" : "#8C8270",
+                          }}
+                        >
+                          {e.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  aria-pressed={important}
+                  onClick={() => setImportant((v) => !v)}
+                  title="Mark as important — keeps it in view even without a deadline"
+                  className="flex items-center gap-1.5 rounded-xl border px-3 py-2.5 text-[13px] transition-colors"
+                  style={{
+                    background: important ? "#2c2a22" : "transparent",
+                    borderColor: important ? "#8C6B3A" : "#3a352f",
+                    color: important ? "#d9b877" : "#8C8270",
+                  }}
+                >
+                  <Star
+                    size={15}
+                    className="shrink-0"
+                    fill={important ? "#d9b877" : "none"}
+                  />
+                  Important
+                </button>
+              </div>
 
               {bundle && (
                 <div className="space-y-2">

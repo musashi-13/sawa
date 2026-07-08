@@ -6,7 +6,8 @@ import {
   useTransform,
   type PanInfo,
 } from "motion/react";
-import { Check, CornerDownRight, Layers, RotateCcw, Trash2, X } from "lucide-react";
+import { Check, CornerDownRight, Layers, RotateCcw, Star, Trash2, X } from "lucide-react";
+import type { Effort } from "../types";
 import type { Task } from "../types";
 import { DeadlineChip } from "./DeadlineChip";
 import { resolveAction } from "../lib/keymap";
@@ -267,6 +268,21 @@ interface TaskCardContentProps {
   peek?: boolean;
 }
 
+const EFFORT_LABEL: Record<Effort, string> = { S: "Small", M: "Medium", L: "Large" };
+
+/** A subtle size marker on the card. */
+function EffortChip({ effort }: { effort: Effort }) {
+  return (
+    <span
+      title={`${EFFORT_LABEL[effort]} effort`}
+      className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full text-[10px] font-semibold"
+      style={{ background: "rgba(120,92,50,0.14)", color: "#8C6B3A" }}
+    >
+      {effort}
+    </span>
+  );
+}
+
 function missedLabel(deadline?: number): string {
   if (deadline === undefined) return "Missed";
   return (
@@ -343,7 +359,7 @@ function TaskCardContent({ task, failed, onDelete, peek }: TaskCardContentProps)
         </p>
       )}
 
-      <div className="absolute bottom-4 left-[18px] z-10">
+      <div className="absolute bottom-4 left-[18px] right-[18px] z-10 flex items-center gap-2">
         {failed ? (
           <span
             className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium"
@@ -353,6 +369,15 @@ function TaskCardContent({ task, failed, onDelete, peek }: TaskCardContentProps)
           </span>
         ) : (
           <DeadlineChip task={task} />
+        )}
+        {task.effort && <EffortChip effort={task.effort} />}
+        {task.important && (
+          <Star
+            size={15}
+            className="ml-auto shrink-0"
+            style={{ color: "#B8915A", fill: "#B8915A" }}
+            aria-label="Important"
+          />
         )}
       </div>
     </div>

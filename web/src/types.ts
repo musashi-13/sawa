@@ -6,6 +6,10 @@
 
 export type ID = string;
 
+/** Rough size/effort of a task: Small, Medium, Large. Drives slack- and
+ *  quick-win-based ranking in the queue engine. */
+export type Effort = "S" | "M" | "L";
+
 export interface TaskStream {
   id: ID;
   name: string;
@@ -41,6 +45,27 @@ export interface Task {
 
   /** Set on tasks that were spawned from a bundle, for the breadcrumb. */
   parentTitle?: string;
+
+  /** Optional effort/size estimate. Enables Least-Slack-Time urgency near a
+   *  deadline and a quick-win bias when there is none. */
+  effort?: Effort;
+
+  /** User-flagged importance (an Eisenhower-style axis), independent of any
+   *  deadline, so important-but-not-urgent tasks don't sink out of view. */
+  important?: boolean;
+
+  /** Epoch ms of the most recent postpone. Drives the *decaying* postpone
+   *  penalty — the suppression wears off over time so "not now" isn't "never". */
+  postponedAt?: number;
+
+  /**
+   * Materialized queue position within its stream (0 = top of the stack).
+   * Recomputed by the queue engine on discrete events + app-open and synced via
+   * `updatedAt`, so every device shows the same stack. It is *derived* from the
+   * scoring function, but persisted to freeze the snapshot between events (the
+   * stack shouldn't reshuffle under your finger as time passes).
+   */
+  order?: number;
 
   /**
    * Soft signal used by the ranking algorithm. Each postpone increments this,
