@@ -27,24 +27,24 @@ const STEPS: Step[] = [
     target: "add",
     pill: true,
     title: "Stack up your day",
-    body: "Tap **Add a task** to drop a card onto the stack. Swipe a card **right to complete**, **left to postpone** — whatever you can do now floats to the top.",
+    body: "Tap **Add a task** to drop a card onto the stack. Swipe a card **right to complete**, **left to postpone**. Whatever you can do now floats to the top.",
   },
   {
     target: "streams",
     title: "Flow between streams",
-    body: "Your tasks live in **streams**. Sawa starts you with three — Daily, Projects and Errands. Use the arrows to move between them, and the **gear** up top to rename, reorder, add or remove them.",
+    body: "Your tasks live in **streams**. Sawa starts you with three: Daily, Projects and Errands. Use the arrows to move between them, and the **gear** up top to rename, reorder, add or remove them.",
   },
   {
     target: "streak",
     pill: true,
     title: "Keep the streak alive",
-    body: "Finish at least **one task a day** and your streak grows. Miss a day and it resets — a gentle nudge to keep the stream moving.",
+    body: "Finish at least **one task a day** and your streak grows. Miss a day and it resets, a gentle nudge to keep the stream moving.",
   },
   {
     target: "bundle",
     pill: true,
     title: "Bundle bigger quests",
-    body: "A **bundle** (束) holds several subtasks. Swipe it right to **unfold** its pieces into the stack as separate cards — no fixed order, just pick what you can do now.",
+    body: "A **bundle** (束) holds several subtasks. Swipe it right to **unfold** its pieces into the stack as separate cards. No fixed order, just pick what you can do now.",
   },
 ];
 
