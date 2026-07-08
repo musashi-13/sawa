@@ -1,10 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 import {
   AnimatePresence,
-  animate,
   motion,
   useMotionValue,
-  useMotionValueEvent,
   useTransform,
   type PanInfo,
 } from "motion/react";
@@ -15,30 +13,27 @@ import { resolveAction } from "../lib/keymap";
 
 export type StackMode = "stack" | "failed";
 
-const VISIBLE = 7;
-const STEP = 13; // vertical peek between stacked cards
+const SWIPE_THRESHOLD = 100;
+const VELOCITY_THRESHOLD = 500;
+const STEP = 12; // vertical peek between stacked cards
 const SCALE_STEP = 0.05;
-const SWIPE_THRESHOLD = 110;
-const VELOCITY_THRESHOLD = 550;
-
-// Darkening slabs behind the parchment cards (front -> back).
-const BACK_COLORS = ["#6E6555", "#4E473C", "#39342D", "#322E2A", "#2C2925"];
 const PARCHMENT = "linear-gradient(158deg,#E6DDC9 0%,#DBD0B6 55%,#CDC0A3 100%)";
+const SLAB = ["#4E473C", "#39342D", "#322E2A", "#2C2925"];
 
-/** Keyboard/programmatic command to the top card. `n` is a monotonic nonce. */
-export interface StackCommand {
-  dir: "left" | "right";
-  n: number;
-}
-
-/** Reports the top card's live drag x to the stack (for the static indicators). */
-type ReportDragX = (x: number, id: string) => void;
+// ─────────────────────────────────────────────────────────────────────────────
+// CardStack — a single interactive top card over static peek cards.
+//
+// Only the top card drags and animates; the cards behind are plain static
+// layers. Committing a swipe changes the data, which changes the top card's
+// key, so AnimatePresence flies the old card out and scales the next one up.
+// There is no shared drag state, no opacity tied to drag position, and no
+// re-ranking of a live multi-card stack — the classes of bug that caused the
+// mid-swipe flashes and the invisible last card.
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface CardStackProps {
   tasks: Task[];
-  /** "stack" = normal; "failed" = the Failed bin (right swipe revives). */
   mode?: StackMode;
-  /** When false, keyboard shortcuts are ignored (e.g. a modal is open). */
   keyboardEnabled?: boolean;
   onComplete: (id: string) => void;
   onPostpone: (id: string) => void;
@@ -55,36 +50,37 @@ export function CardStack({
   onUnfold,
   onDelete,
 }: CardStackProps) {
-  const visible = tasks.slice(0, VISIBLE);
-  const [command, setCommand] = useState<StackCommand | null>(null);
-
-  // The static swipe indicators react to whichever card is currently on top.
-  // Each card owns its own drag `x`; the top card forwards its value here so the
-  // indicators can live beside the stack without moving with the card.
-  const indicatorX = useMotionValue(0);
-  const completeHint = useTransform(indicatorX, [25, 150], [0, 1]);
-  const postponeHint = useTransform(indicatorX, [-150, -25], [1, 0]);
-  const completeScale = useTransform(indicatorX, [25, 150], [0.65, 1]);
-  const postponeScale = useTransform(indicatorX, [-150, -25], [1, 0.65]);
-
+  const visible = tasks.slice(0, 4);
   const top = visible[0];
+  const peeks = visible.slice(1); // depth 1..3, rendered behind the top
   const failed = mode === "failed";
 
-  // Only the genuine current top card feeds the indicators (an exiting card that
-  // still thinks it's the top is filtered out by id).
-  const topIdRef = useRef(top?.id);
-  topIdRef.current = top?.id;
-  const reportDragX = useCallback<ReportDragX>(
-    (v, id) => {
-      if (id === topIdRef.current) indicatorX.set(v);
-    },
-    [indicatorX],
-  );
+  // Drag offset of the top card → drives the static side indicators only.
+  const hintX = useMotionValue(0);
+  const completeHint = useTransform(hintX, [30, 130], [0, 1]);
+  const postponeHint = useTransform(hintX, [-130, -30], [1, 0]);
+  const completeScale = useTransform(hintX, [30, 130], [0.7, 1]);
+  const postponeScale = useTransform(hintX, [-130, -30], [1, 0.7]);
+  // Exit direction for the leaving card (set the instant a swipe commits).
+  const exitDir = useMotionValue(1);
 
-  // Reset the indicators the moment a new card reaches the top.
-  useLayoutEffect(() => {
-    indicatorX.set(0);
-  }, [top?.id, indicatorX]);
+  function act(dir: 1 | -1, task: Task) {
+    if (dir > 0) {
+      if (failed) onComplete(task.id);
+      else if (task.isBundle) onUnfold(task.id);
+      else onComplete(task.id);
+    } else {
+      if (failed) onDelete(task.id);
+      else onPostpone(task.id);
+    }
+  }
+
+  function commit(dir: 1 | -1) {
+    if (!top) return;
+    hintX.set(0);
+    exitDir.set(dir);
+    act(dir, top);
+  }
 
   useEffect(() => {
     if (!keyboardEnabled) return;
@@ -95,10 +91,10 @@ export function CardStack({
       const action = resolveAction(e);
       if (action === "complete") {
         e.preventDefault();
-        setCommand((c) => ({ dir: "right", n: (c?.n ?? 0) + 1 }));
+        commit(1);
       } else if (action === "postpone") {
         e.preventDefault();
-        setCommand((c) => ({ dir: "left", n: (c?.n ?? 0) + 1 }));
+        commit(-1);
       } else if (action === "delete") {
         e.preventDefault();
         onDelete(top.id);
@@ -106,40 +102,77 @@ export function CardStack({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [keyboardEnabled, top, onDelete]);
+    // commit closes over top/failed; re-subscribe when they change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keyboardEnabled, top, failed]);
+
+  function handleDragEnd(_: unknown, info: PanInfo) {
+    hintX.set(0);
+    const goRight =
+      info.offset.x > SWIPE_THRESHOLD || info.velocity.x > VELOCITY_THRESHOLD;
+    const goLeft =
+      info.offset.x < -SWIPE_THRESHOLD || info.velocity.x < -VELOCITY_THRESHOLD;
+    if (goRight) commit(1);
+    else if (goLeft) commit(-1);
+  }
 
   return (
     <div className="relative mx-auto h-[260px] w-full">
-      <AnimatePresence initial={false}>
-        {visible.length === 0 ? (
-          <EmptyState key="empty" />
+      {/* Static peek cards behind the top (back-to-front). */}
+      {peeks
+        .map((task, i) => (
+          <PeekCard key={task.id} task={task} depth={i + 1} failed={failed} />
+        ))
+        .reverse()}
+
+      <AnimatePresence custom={exitDir.get()} initial={false}>
+        {top ? (
+          <motion.div
+            key={top.id}
+            custom={exitDir.get()}
+            className="no-select absolute inset-x-0 bottom-0 h-[185px] overflow-hidden rounded-[22px]"
+            style={{
+              zIndex: 50,
+              transformOrigin: "bottom center",
+              background: PARCHMENT,
+              border: top.isBundle
+                ? "1px solid #D8C9A8"
+                : "1px solid rgba(120,92,50,0.18)",
+              boxShadow: "0 18px 40px -16px rgba(20,14,8,0.6)",
+              touchAction: "pan-y",
+              cursor: "grab",
+            }}
+            initial={{ y: -STEP, scale: 1 - SCALE_STEP, opacity: 1 }}
+            animate={{ y: 0, scale: 1, opacity: 1 }}
+            variants={{
+              exit: (dir: number) => ({
+                x: dir * (typeof window !== "undefined" ? window.innerWidth : 600) * 1.15,
+                rotate: dir * 8,
+                opacity: 0,
+                transition: { duration: 0.3, ease: [0.32, 0, 0.67, 0] },
+              }),
+            }}
+            exit="exit"
+            transition={{ type: "spring", stiffness: 420, damping: 36 }}
+            drag="x"
+            dragSnapToOrigin
+            dragElastic={0.55}
+            whileDrag={{ cursor: "grabbing" }}
+            onDrag={(_, info) => hintX.set(info.offset.x)}
+            onDragEnd={handleDragEnd}
+          >
+            <TaskCardContent task={top} failed={failed} onDelete={() => onDelete(top.id)} />
+          </motion.div>
         ) : (
-          visible
-            .map((task, i) => (
-              <StackCard
-                key={task.id}
-                task={task}
-                depth={i}
-                isTop={i === 0}
-                mode={mode}
-                command={command}
-                reportDragX={reportDragX}
-                onComplete={onComplete}
-                onPostpone={onPostpone}
-                onUnfold={onUnfold}
-                onDelete={onDelete}
-              />
-            ))
-            // Render back-to-front so DOM order matches z-stacking.
-            .reverse()
+          <EmptyState key="empty" />
         )}
       </AnimatePresence>
 
-      {/* Static swipe indicators — pinned to the sides of the stack. */}
+      {/* Static swipe indicators, pinned to the sides. */}
       {top && (
         <div
           className="pointer-events-none absolute inset-x-0 bottom-0 flex h-[185px] items-center justify-between px-2"
-          style={{ zIndex: 200 }}
+          style={{ zIndex: 60 }}
         >
           <motion.div
             className="flex h-11 w-11 items-center justify-center rounded-full shadow-md"
@@ -155,7 +188,6 @@ export function CardStack({
               <CornerDownRight size={22} className="rotate-180 text-white" />
             )}
           </motion.div>
-
           <motion.div
             className="flex h-11 w-11 items-center justify-center rounded-full shadow-md"
             style={{
@@ -178,9 +210,39 @@ export function CardStack({
   );
 }
 
+/** A static, non-interactive card behind the top one. Depth 1 shows content so
+ *  swiping the top away reveals a real card; deeper cards are dark stacked edges. */
+function PeekCard({
+  task,
+  depth,
+  failed,
+}: {
+  task: Task;
+  depth: number;
+  failed: boolean;
+}) {
+  const parchment = depth === 1;
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 bottom-0 h-[185px] overflow-hidden rounded-[22px]"
+      style={{
+        zIndex: 40 - depth,
+        transformOrigin: "bottom center",
+        transform: `translateY(${-depth * STEP}px) scale(${1 - depth * SCALE_STEP})`,
+        background: parchment ? PARCHMENT : SLAB[Math.min(depth - 2, SLAB.length - 1)],
+        filter: parchment ? "brightness(0.9)" : undefined,
+        border: parchment ? "1px solid rgba(120,92,50,0.14)" : "none",
+      }}
+    >
+      {parchment && <TaskCardContent task={task} failed={failed} peek />}
+    </div>
+  );
+}
+
 function EmptyState() {
   return (
     <motion.div
+      key="empty"
       className="absolute inset-x-0 bottom-0 flex h-[185px] flex-col items-center justify-center"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -194,156 +256,11 @@ function EmptyState() {
   );
 }
 
-interface StackCardProps {
-  task: Task;
-  depth: number;
-  isTop: boolean;
-  mode: StackMode;
-  command: StackCommand | null;
-  reportDragX: ReportDragX;
-  onComplete: (id: string) => void;
-  onPostpone: (id: string) => void;
-  onUnfold: (id: string) => void;
-  onDelete: (id: string) => void;
-}
-
-function StackCard({
-  task,
-  depth,
-  isTop,
-  mode,
-  command,
-  reportDragX,
-  onComplete,
-  onPostpone,
-  onUnfold,
-  onDelete,
-}: StackCardProps) {
-  const failed = mode === "failed";
-  // Each card owns its drag position, so a newly-promoted top card always starts
-  // at x=0 (opaque) rather than inheriting the previous card's off-screen value.
-  const x = useMotionValue(0);
-  const rotate = useTransform(x, [-240, 240], [-7, 7]);
-  // Fade as the card travels — so a long desktop fling dissolves, not just exits.
-  const dragOpacity = useTransform(x, [-380, -90, 0, 90, 380], [0, 0.8, 1, 0.8, 0]);
-  const [committing, setCommitting] = useState(false);
-  const committingRef = useRef(false);
-
-  // Feed the top card's live drag to the stack's static indicators.
-  useMotionValueEvent(x, "change", (v) => {
-    if (isTop) reportDragX(v, task.id);
-  });
-
-  // Right swipe: revive in the Failed bin, unfold a bundle, else complete.
-  const rightAction = () => {
-    if (failed) onComplete(task.id);
-    else if (task.isBundle) onUnfold(task.id);
-    else onComplete(task.id);
-  };
-  // Left swipe: discard in the Failed bin, otherwise postpone.
-  const leftAction = () => (failed ? onDelete(task.id) : onPostpone(task.id));
-
-  // `keepMounted` is true only for postpone — the card stays and re-ranks to the
-  // back, so it snaps home. Everything else leaves the stack (stays off-screen).
-  const fly = (dir: 1 | -1, after: () => void, keepMounted: boolean) => {
-    if (committingRef.current) return;
-    committingRef.current = true;
-    setCommitting(true);
-    const distance = (typeof window !== "undefined" ? window.innerWidth : 600) * 1.3;
-    animate(x, dir * distance, {
-      duration: 0.34,
-      ease: [0.32, 0, 0.67, 0],
-    }).finished.then(() => {
-      after();
-      if (keepMounted) x.set(0);
-      committingRef.current = false;
-      setCommitting(false);
-    });
-  };
-
-  const handleDragEnd = (_: unknown, info: PanInfo) => {
-    const goRight =
-      info.offset.x > SWIPE_THRESHOLD || info.velocity.x > VELOCITY_THRESHOLD;
-    const goLeft =
-      info.offset.x < -SWIPE_THRESHOLD || info.velocity.x < -VELOCITY_THRESHOLD;
-
-    if (goRight) {
-      fly(1, rightAction, false);
-    } else if (goLeft) {
-      fly(-1, leftAction, !failed); // postpone keeps the card; discard removes it
-    } else {
-      animate(x, 0, { type: "spring", stiffness: 520, damping: 34 });
-    }
-  };
-
-  // React to keyboard commands. Every card tracks the latest nonce so that a
-  // card promoted to the top later doesn't replay a stale command.
-  const lastCmdN = useRef(command?.n ?? 0);
-  useEffect(() => {
-    if (!command || command.n === lastCmdN.current) return;
-    if (isTop) {
-      if (command.dir === "right") fly(1, rightAction, false);
-      else fly(-1, leftAction, !failed);
-    }
-    lastCmdN.current = command.n;
-    // fly + handlers are stable enough for this trigger; nonce guards re-runs.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [command, isTop]);
-
-  // The top two cards are parchment (so swiping the top away reveals a real card,
-  // not a blank slab); deeper cards are dark stacked edges.
-  const isParchment = depth <= 1;
-  const showContent = depth <= 1;
-  const back = BACK_COLORS[Math.min(depth - 2, BACK_COLORS.length - 1)] ?? "#2C2925";
-
-  return (
-    <motion.div
-      className="no-select absolute inset-x-0 bottom-0 h-[185px] overflow-hidden rounded-[22px]"
-      style={{
-        x: isTop ? x : 0,
-        rotate: isTop ? rotate : 0,
-        opacity: isTop ? dragOpacity : undefined,
-        transformOrigin: "bottom center",
-        zIndex: 100 - depth,
-        background: isParchment ? PARCHMENT : back,
-        // Dim the second card so it reads as behind the active one.
-        filter: depth === 1 ? "brightness(0.8)" : undefined,
-        border: task.isBundle && isParchment
-          ? "1px solid #D8C9A8"
-          : isParchment
-            ? "1px solid rgba(120,92,50,0.18)"
-            : "none",
-        boxShadow: isTop ? "0 18px 40px -16px rgba(20,14,8,0.6)" : "none",
-        touchAction: "pan-y",
-        cursor: isTop ? "grab" : "default",
-        pointerEvents: isTop ? "auto" : "none",
-      }}
-      initial={{ y: -depth * STEP - 16, scale: 1 - depth * SCALE_STEP, opacity: 0 }}
-      animate={{
-        y: -depth * STEP,
-        scale: 1 - depth * SCALE_STEP,
-        ...(isTop ? {} : { opacity: depth > 5 ? 0 : 1 }),
-      }}
-      exit={{ opacity: 0, transition: { duration: 0.18 } }}
-      transition={{ type: "spring", stiffness: 380, damping: 32 }}
-      drag={isTop && !committing ? "x" : false}
-      dragSnapToOrigin={false}
-      dragElastic={0.7}
-      dragMomentum={false}
-      onDragEnd={isTop ? handleDragEnd : undefined}
-      whileTap={isTop ? { cursor: "grabbing" } : undefined}
-    >
-      {showContent && (
-        <TaskCardContent task={task} failed={failed} onDelete={() => onDelete(task.id)} />
-      )}
-    </motion.div>
-  );
-}
-
 interface TaskCardContentProps {
   task: Task;
   failed: boolean;
-  onDelete: () => void;
+  onDelete?: () => void;
+  peek?: boolean;
 }
 
 function missedLabel(deadline?: number): string {
@@ -357,12 +274,11 @@ function missedLabel(deadline?: number): string {
   );
 }
 
-function TaskCardContent({ task, failed, onDelete }: TaskCardContentProps) {
+function TaskCardContent({ task, failed, onDelete, peek }: TaskCardContentProps) {
   const childCount = task.childTitles?.length ?? 0;
   const accent = task.isBundle ? "#B8915A" : failed ? "#C0584A" : "#C96442";
   return (
     <div className="relative h-full overflow-hidden py-[18px] pl-[22px] pr-[18px]">
-      {/* Decorative layers (behind the text) */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
@@ -385,13 +301,15 @@ function TaskCardContent({ task, failed, onDelete }: TaskCardContentProps) {
         沢
       </span>
 
-      <button
-        onClick={onDelete}
-        aria-label="Delete task"
-        className="absolute right-3 top-3 z-10 text-[#a89e89] transition-colors hover:text-[#9C4A2C]"
-      >
-        <X size={16} />
-      </button>
+      {!peek && onDelete && (
+        <button
+          onClick={onDelete}
+          aria-label="Delete task"
+          className="absolute right-3 top-3 z-10 text-[#a89e89] transition-colors hover:text-[#9C4A2C]"
+        >
+          <X size={16} />
+        </button>
+      )}
 
       {task.isBundle ? (
         <div className="relative z-10 mb-3 flex items-center gap-2.5">
