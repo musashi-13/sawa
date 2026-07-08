@@ -146,6 +146,10 @@ export function CardStack({
             animate={{ y: 0, scale: 1, opacity: 1 }}
             variants={{
               exit: (dir: number) => ({
+                // Lift above the newly-promoted top card (z 50) so the flying
+                // card stays on top of the stack while it exits, instead of
+                // being painted behind it.
+                zIndex: 70,
                 x: dir * (typeof window !== "undefined" ? window.innerWidth : 600) * 1.15,
                 rotate: dir * 8,
                 opacity: 0,
