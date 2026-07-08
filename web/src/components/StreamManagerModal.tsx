@@ -5,7 +5,7 @@ import {
   motion,
   useDragControls,
 } from "motion/react";
-import { Check, GripVertical, Plus, Trash2, X } from "lucide-react";
+import { Check, Compass, GripVertical, Plus, Trash2, X } from "lucide-react";
 import type { TaskStream } from "../types";
 import { useKeyboardInset } from "../hooks/useKeyboardInset";
 
@@ -38,6 +38,8 @@ interface StreamManagerModalProps {
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
   onReorder: (orderedIds: string[]) => void;
+  /** Replay the first-run walkthrough. */
+  onReplayTour: () => void;
 }
 
 export function StreamManagerModal({
@@ -51,6 +53,7 @@ export function StreamManagerModal({
   onRename,
   onDelete,
   onReorder,
+  onReplayTour,
 }: StreamManagerModalProps) {
   const keyboardInset = useKeyboardInset();
   const [rows, setRows] = useState<Row[]>([]);
@@ -190,6 +193,21 @@ export function StreamManagerModal({
               className="text-clay hover:text-cream-soft mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#4E473C] py-2.5 text-[13px] transition-colors"
             >
               <Plus size={16} /> New stream
+            </button>
+
+            {/* Divider + walkthrough replay */}
+            <div className="border-border-warm my-5 border-t" />
+            <button
+              onClick={() => {
+                onClose();
+                onReplayTour();
+              }}
+              className="text-muted hover:text-cream-soft flex w-full items-center justify-between rounded-xl py-1 text-[13px] transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <Compass size={16} /> Show walkthrough
+              </span>
+              <span className="text-muted-soft text-[11px]">Replay the intro tour</span>
             </button>
           </motion.div>
         </motion.div>

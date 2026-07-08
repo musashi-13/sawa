@@ -185,21 +185,12 @@ export default function App({ profileSlot, clerkName, authPending = false }: App
             />
           </div>
 
-          <div className="mt-3 flex items-center justify-center gap-2 text-[11px]">
-            <button
-              onClick={() => setHelp(true)}
-              className="text-muted-soft hover:text-cream-soft transition-colors"
-            >
-              press ? for shortcuts
-            </button>
-            <span className="text-muted-soft/40">·</span>
-            <button
-              onClick={() => setTour(true)}
-              className="text-muted-soft hover:text-cream-soft transition-colors"
-            >
-              walkthrough
-            </button>
-          </div>
+          <button
+            onClick={() => setHelp(true)}
+            className="text-muted-soft hover:text-cream-soft mt-3 self-center text-[11px] transition-colors"
+          >
+            press ? for shortcuts
+          </button>
         </main>
       </div>
 
@@ -220,6 +211,7 @@ export default function App({ profileSlot, clerkName, authPending = false }: App
         onRename={actions.renameStream}
         onDelete={actions.deleteStream}
         onReorder={actions.reorderStreams}
+        onReplayTour={() => setTour(true)}
       />
       <KeyboardHelp open={help} onClose={() => setHelp(false)} />
       <Tutorial open={tour} onClose={closeTour} />
