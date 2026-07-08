@@ -19,7 +19,7 @@ export function StreamSwitcher({
   onNext,
 }: StreamSwitcherProps) {
   return (
-    <div className="flex items-center justify-center gap-5">
+    <div data-tour="streams" className="flex items-center justify-center gap-5">
       <button
         aria-label="Previous stream"
         onClick={onPrev}

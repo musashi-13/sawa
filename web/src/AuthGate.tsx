@@ -49,6 +49,9 @@ export function AuthGate() {
       <App
         profileSlot={<ProfileControl onSignIn={() => setPromptOpen(true)} />}
         clerkName={isSignedIn ? (user?.firstName ?? undefined) : undefined}
+        // Hold the first-run tour until the sign-in sheet is resolved (the user
+        // signed in, or dismissed it) so the two overlays don't stack up.
+        authPending={!isLoaded || (!isSignedIn && !dismissed)}
       />
       <SignInPrompt
         open={showPrompt}
