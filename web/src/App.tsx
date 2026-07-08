@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSawa, type NewTaskInput } from "./hooks/useSawa";
 import { InkWash } from "./components/InkWash";
 import { TopBar } from "./components/TopBar";
@@ -7,11 +7,26 @@ import { StreamSwitcher } from "./components/StreamSwitcher";
 import { AddBar } from "./components/AddBar";
 import { AddTaskModal } from "./components/AddTaskModal";
 import { StreamManagerModal } from "./components/StreamManagerModal";
-import { NameModal } from "./components/NameModal";
 import { KeyboardHelp } from "./components/KeyboardHelp";
+import { Tutorial } from "./components/Tutorial";
 import { resolveAction } from "./lib/keymap";
 
-export default function App() {
+// Shown once per device on first use; the replay button re-opens it any time.
+const TOUR_DONE_KEY = "sawa.tour.v1.done";
+
+interface AppProps {
+  /** Auth profile control (Clerk), injected only when Clerk is enabled. */
+  profileSlot?: ReactNode;
+  /** Signed-in user's name from Clerk, used to fill the greeting. */
+  clerkName?: string;
+  /**
+   * True while the sign-in decision is still pending (Clerk build only), so the
+   * first-run tour waits until the sign-in sheet is resolved before opening.
+   */
+  authPending?: boolean;
+}
+
+export default function App({ profileSlot, clerkName, authPending = false }: AppProps) {
   const {
     data,
     userName,
@@ -36,10 +51,33 @@ export default function App() {
   });
   const [help, setHelp] = useState(false);
   const [manage, setManage] = useState(false);
+  const [tour, setTour] = useState(false);
+  const tourStarted = useRef(false);
 
-  // No name stored yet → block the app behind the first-run name prompt.
-  const needsName = !userName;
-  const overlayOpen = modal.open || help || manage || needsName;
+  // A signed-in Clerk user fills the greeting from their account name.
+  useEffect(() => {
+    if (clerkName && !userName) actions.setUserName(clerkName);
+  }, [clerkName, userName, actions]);
+
+  // First-run walkthrough: open once the sign-in decision is resolved, unless
+  // the user has already seen (or replayed and dismissed) it on this device.
+  useEffect(() => {
+    if (tourStarted.current || authPending) return;
+    const seen =
+      typeof window !== "undefined" &&
+      localStorage.getItem(TOUR_DONE_KEY) === "1";
+    if (!seen) {
+      tourStarted.current = true;
+      setTour(true);
+    }
+  }, [authPending]);
+
+  function closeTour() {
+    if (typeof window !== "undefined") localStorage.setItem(TOUR_DONE_KEY, "1");
+    setTour(false);
+  }
+
+  const overlayOpen = modal.open || help || manage || tour;
   const { nextStream, prevStream, moveActiveStream } = actions;
 
   // Task count per stream, for the manage sheet's delete confirmation.
@@ -62,7 +100,7 @@ export default function App() {
         setManage(false);
         return;
       }
-      if (modal.open || manage || needsName) return;
+      if (modal.open || manage) return;
 
       switch (action) {
         case "addTask": // let a focused button handle its own Space
@@ -89,7 +127,7 @@ export default function App() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [modal.open, manage, needsName, prevStream, nextStream, moveActiveStream]);
+  }, [modal.open, manage, prevStream, nextStream, moveActiveStream]);
 
   function handleSave(input: NewTaskInput, isBundle: boolean) {
     const targetId = activeStream?.id ?? streams[0]?.id;
@@ -113,6 +151,7 @@ export default function App() {
             failedCount={failedCount}
             failedView={isFailedView}
             onManageStreams={() => setManage(true)}
+            profileSlot={profileSlot}
           />
 
           <div className="mt-7 flex flex-col gap-6">
@@ -172,9 +211,10 @@ export default function App() {
         onRename={actions.renameStream}
         onDelete={actions.deleteStream}
         onReorder={actions.reorderStreams}
+        onReplayTour={() => setTour(true)}
       />
       <KeyboardHelp open={help} onClose={() => setHelp(false)} />
-      <NameModal open={needsName} onSave={actions.setUserName} />
+      <Tutorial open={tour} onClose={closeTour} />
     </div>
   );
 }

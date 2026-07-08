@@ -10,6 +10,7 @@ export function AddBar({ onAddTask, onAddBundle }: AddBarProps) {
     <div className="flex gap-2.5">
       <button
         onClick={onAddTask}
+        data-tour="add"
         className="bg-bg-soft border-border-warm flex flex-[0.7] items-center justify-center gap-2 rounded-full border px-4 py-2.5 transition-transform active:scale-[0.98]"
       >
         <Plus size={17} className="text-gold shrink-0" />
@@ -17,6 +18,7 @@ export function AddBar({ onAddTask, onAddBundle }: AddBarProps) {
       </button>
       <button
         onClick={onAddBundle}
+        data-tour="bundle"
         className="bg-bg-soft border-border-warm flex flex-[0.3] items-center justify-center gap-1.5 rounded-full border px-3 py-2.5 transition-transform active:scale-[0.98]"
       >
         {/* 束 = "bundle" — same glyph as the bundle card, in place of a generic icon.

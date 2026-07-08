@@ -1,13 +1,12 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
-// M2 (sync) stores the entire SawaData blob in a single-row `documents` table.
-// This is the minimal change that keeps the existing blob-based `Store`
-// interface — and therefore `useSawa` and the whole component tree — untouched.
-// Granular per-record tables + `updatedAt` reconciliation are a future
-// refinement (the ids/timestamps are already in the data model for it).
+// Each signed-in user gets their own SawaData document, keyed by their Clerk
+// user id (identity.subject). `userId` is optional only so the pre-auth M2
+// document doesn't fail validation — every new document is written with it.
 export default defineSchema({
   documents: defineTable({
+    userId: v.optional(v.string()),
     data: v.any(),
-  }),
+  }).index("by_user", ["userId"]),
 });

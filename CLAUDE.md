@@ -66,10 +66,16 @@ npm run typecheck
   (derived by `isFailed`), leaves the active stack, and collects in the Failed
   bin. There: swipe **right = revive** (clears the deadline so it returns),
   **left = discard** (delete).
-- **Ranking** (`web/src/lib/ranking.ts`): the "what should I do now" algorithm —
-  **the seam Karan owns**. Order emerges only from deadline urgency + postpones;
-  never impose a fixed order. UI depends only on `rankTasks`, so scoring can be
-  rewritten freely.
+- **Queue engine** (`web/src/lib/queue.ts`): the "what should I do now"
+  algorithm — **the seam Karan owns**. `scoreTask` blends EDF deadline pull
+  (sharpened by `effort` into least-slack-time), a decaying postpone penalty,
+  anti-starvation aging, a WSJF quick-win bias, an Eisenhower `important` boost,
+  and a slight bundle demotion. Weights live in `DEFAULT_QUEUE_WEIGHTS`; tune
+  freely. `reindex` **materializes** the ranking into a persisted `order` on each
+  task (0 = top of its stream) — recomputed on every write (via `persist`) and
+  once on app-open, so the stack is a *stable, synced snapshot* rather than
+  something that reshuffles live. The UI only reads `order` (`orderedByQueue`),
+  never sorts itself. `ranking.ts` now holds just `isFailed` + `urgencyBand`.
 - **Streak / counts**: streak = consecutive days with ≥1 completion. The
   "N left · N complete · N failed" line is scoped to the active context.
 

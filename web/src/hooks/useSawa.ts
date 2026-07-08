@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
-import type { SawaData, Task, TaskStream } from "../types";
+import type { Effort, SawaData, Task, TaskStream } from "../types";
 import { store } from "../store/store";
 import { dayKey, now, uuid } from "../lib/util";
-import { isFailed, rankTasks } from "../lib/ranking";
+import { isFailed } from "../lib/ranking";
+import { orderedByQueue, reindex } from "../lib/queue";
 import { currentStreak } from "../lib/streak";
 
+// Every write goes through the queue engine first, so the persisted `order`
+// snapshot is always fresh — at no extra cost, since the store saves the whole
+// blob in one shot regardless of how many task orders moved.
 function persist(next: SawaData): SawaData {
-  store.save(next);
-  return next;
+  const { data } = reindex(next);
+  store.save(data);
+  return data;
 }
 
 export interface NewTaskInput {
@@ -15,6 +20,8 @@ export interface NewTaskInput {
   description?: string;
   deadline?: number;
   childTitles?: string[];
+  effort?: Effort;
+  important?: boolean;
 }
 
 /** A switcher entry — a real stream, or the synthetic Failed bin. */
@@ -33,6 +40,17 @@ export function useSawa() {
 
   // React to external updates (other tabs today; sync engine later).
   useEffect(() => store.subscribe((incoming) => setData(incoming)), []);
+
+  // App-open: advance the queue snapshot once (deadlines may have crossed
+  // boundaries overnight), persisting only if the order actually changed.
+  useEffect(() => {
+    setData((prev) => {
+      const { data, changed } = reindex(prev);
+      if (!changed) return prev;
+      store.save(data);
+      return data;
+    });
+  }, []);
 
   // Re-render periodically so tasks fail in real time as deadlines pass.
   useEffect(() => {
@@ -88,11 +106,12 @@ export function useSawa() {
     (id: string) =>
       mutate((d) => ({
         ...d,
-        tasks: d.tasks.map((task) =>
-          task.id === id
-            ? { ...task, postpones: task.postpones + 1, updatedAt: now() }
-            : task,
-        ),
+        tasks: d.tasks.map((task) => {
+          if (task.id !== id) return task;
+          const t = now();
+          // Stamp `postponedAt` so the penalty can decay from this moment.
+          return { ...task, postpones: task.postpones + 1, postponedAt: t, updatedAt: t };
+        }),
       })),
     [mutate],
   );
@@ -164,6 +183,8 @@ export function useSawa() {
             ? (input.childTitles ?? []).map((s) => s.trim()).filter(Boolean)
             : undefined,
           deadline: input.deadline,
+          effort: input.effort,
+          important: input.important || undefined,
           postpones: 0,
           createdAt: t,
           updatedAt: t,
@@ -275,17 +296,19 @@ export function useSawa() {
     [mutate],
   );
 
-  // Active list: the Failed bin (most-recently-missed first) or a ranked stream.
+  // Active list: the Failed bin (most-recently-missed first) or a stream sorted
+  // by its materialized queue `order` (the synced snapshot the engine writes).
   const activeTasks: Task[] = isFailedView
     ? [...failedAll].sort((a, b) => (b.deadline ?? 0) - (a.deadline ?? 0))
     : activeStream
-      ? rankTasks(
+      ? orderedByQueue(
           data.tasks.filter(
             (t) =>
               t.streamId === activeStream.id &&
               t.completedAt === undefined &&
               !isFailed(t, t0),
           ),
+          t0,
         )
       : [];
 
