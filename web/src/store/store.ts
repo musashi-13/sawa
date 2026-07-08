@@ -13,11 +13,18 @@ import { api } from "../../convex/_generated/api";
 // component tree does not change either way.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Fetches a fresh auth token (Clerk). Returns null when signed out. */
+export type TokenFetcher = (args: {
+  forceRefreshToken: boolean;
+}) => Promise<string | null>;
+
 export interface Store {
   load(): SawaData;
   save(data: SawaData): void;
   /** Notifies subscribers of external changes (another tab / another device). */
   subscribe(fn: (data: SawaData) => void): () => void;
+  /** Wire (or clear, with null) the auth token source. No-op for local storage. */
+  setAuth?(getToken: TokenFetcher | null): void;
 }
 
 // Bumped v2 → v3 on the "context" → "stream" rename to reset any old-shape data.
@@ -100,7 +107,8 @@ export class ConvexStore implements Store {
   private client: ConvexClient;
   private cache: SawaData;
   private listeners = new Set<(data: SawaData) => void>();
-  private initialized = false;
+  private authed = false;
+  private seeded = false;
 
   constructor(url: string) {
     this.client = new ConvexClient(url);
@@ -108,19 +116,34 @@ export class ConvexStore implements Store {
 
     this.client.onUpdate(api.data.get, {}, (server) => {
       if (server == null) {
-        // Server is empty — seed it once from our local cache.
-        if (!this.initialized) {
-          this.initialized = true;
-          void this.client.mutation(api.data.save, { data: this.cache });
+        // No server data yet. Once authenticated, seed the account once from the
+        // local cache (this migrates any pre-sign-in data on first login).
+        if (this.authed && !this.seeded) {
+          this.seeded = true;
+          void this.client.mutation(api.data.save, { data: this.cache }).catch(
+            () => {},
+          );
         }
         return;
       }
-      this.initialized = true;
+      this.seeded = true;
       const data = server as SawaData;
       this.cache = data;
       writeCache(data);
       this.listeners.forEach((fn) => fn(data));
     });
+  }
+
+  /** Bridge the auth token in from Clerk (or clear it on sign-out). */
+  setAuth(getToken: TokenFetcher | null): void {
+    if (!getToken) {
+      this.authed = false;
+      this.client.setAuth(async () => null);
+      return;
+    }
+    this.authed = true;
+    this.seeded = false; // allow seeding the (possibly brand-new) account
+    this.client.setAuth(getToken);
   }
 
   load(): SawaData {
@@ -140,9 +163,10 @@ export class ConvexStore implements Store {
   }
 }
 
-// Use Convex when a deployment URL is configured (VITE_CONVEX_URL, injected by
-// the Convex/Vercel build); otherwise fall back to local-only storage.
+// Use Convex only when BOTH a deployment URL and Clerk are configured — the
+// Convex functions require auth, so Convex without Clerk can't sync. Otherwise
+// fall back to local-only storage (safe during rollout / for guest builds).
 const CONVEX_URL = import.meta.env.VITE_CONVEX_URL as string | undefined;
-export const store: Store = CONVEX_URL
-  ? new ConvexStore(CONVEX_URL)
-  : new LocalStore();
+const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
+export const store: Store =
+  CONVEX_URL && CLERK_KEY ? new ConvexStore(CONVEX_URL) : new LocalStore();

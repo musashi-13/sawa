@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSawa, type NewTaskInput } from "./hooks/useSawa";
 import { InkWash } from "./components/InkWash";
 import { TopBar } from "./components/TopBar";
@@ -7,11 +7,17 @@ import { StreamSwitcher } from "./components/StreamSwitcher";
 import { AddBar } from "./components/AddBar";
 import { AddTaskModal } from "./components/AddTaskModal";
 import { StreamManagerModal } from "./components/StreamManagerModal";
-import { NameModal } from "./components/NameModal";
 import { KeyboardHelp } from "./components/KeyboardHelp";
 import { resolveAction } from "./lib/keymap";
 
-export default function App() {
+interface AppProps {
+  /** Auth profile control (Clerk), injected only when Clerk is enabled. */
+  profileSlot?: ReactNode;
+  /** Signed-in user's name from Clerk, used to fill the greeting. */
+  clerkName?: string;
+}
+
+export default function App({ profileSlot, clerkName }: AppProps) {
   const {
     data,
     userName,
@@ -37,9 +43,12 @@ export default function App() {
   const [help, setHelp] = useState(false);
   const [manage, setManage] = useState(false);
 
-  // No name stored yet → block the app behind the first-run name prompt.
-  const needsName = !userName;
-  const overlayOpen = modal.open || help || manage || needsName;
+  // A signed-in Clerk user fills the greeting from their account name.
+  useEffect(() => {
+    if (clerkName && !userName) actions.setUserName(clerkName);
+  }, [clerkName, userName, actions]);
+
+  const overlayOpen = modal.open || help || manage;
   const { nextStream, prevStream, moveActiveStream } = actions;
 
   // Task count per stream, for the manage sheet's delete confirmation.
@@ -62,7 +71,7 @@ export default function App() {
         setManage(false);
         return;
       }
-      if (modal.open || manage || needsName) return;
+      if (modal.open || manage) return;
 
       switch (action) {
         case "addTask": // let a focused button handle its own Space
@@ -89,7 +98,7 @@ export default function App() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [modal.open, manage, needsName, prevStream, nextStream, moveActiveStream]);
+  }, [modal.open, manage, prevStream, nextStream, moveActiveStream]);
 
   function handleSave(input: NewTaskInput, isBundle: boolean) {
     const targetId = activeStream?.id ?? streams[0]?.id;
@@ -113,6 +122,7 @@ export default function App() {
             failedCount={failedCount}
             failedView={isFailedView}
             onManageStreams={() => setManage(true)}
+            profileSlot={profileSlot}
           />
 
           <div className="mt-7 flex flex-col gap-6">
@@ -174,7 +184,6 @@ export default function App() {
         onReorder={actions.reorderStreams}
       />
       <KeyboardHelp open={help} onClose={() => setHelp(false)} />
-      <NameModal open={needsName} onSave={actions.setUserName} />
     </div>
   );
 }

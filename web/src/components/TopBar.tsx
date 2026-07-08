@@ -1,4 +1,6 @@
+import type { ReactNode } from "react";
 import { Flame, Settings2 } from "lucide-react";
+import { SawaStamp } from "./SawaStamp";
 
 interface TopBarProps {
   name: string;
@@ -8,6 +10,8 @@ interface TopBarProps {
   failedCount: number;
   failedView: boolean;
   onManageStreams: () => void;
+  /** Auth profile control, injected only when Clerk is enabled. */
+  profileSlot?: ReactNode;
 }
 
 export function TopBar({
@@ -18,17 +22,23 @@ export function TopBar({
   failedCount,
   failedView,
   onManageStreams,
+  profileSlot,
 }: TopBarProps) {
   return (
     <header className="px-1">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <span className="text-cream text-[22px] font-medium">沢</span>
-          <span className="text-cream-soft text-[15px]">Hi, {name}</span>
+          <SawaStamp size={30} />
+          <span className="text-cream-soft text-[15px]">
+            {name ? `Hi, ${name}` : "Hi"}
+          </span>
         </div>
-        <div className="flex items-center gap-3.5">
-          <div className="flex items-center gap-1.5" title={`${streak} day streak`}>
-            <Flame size={15} className="text-clay" />
+        <div className="flex items-center gap-2.5">
+          <div
+            className="bg-bg-soft border-border-warm flex items-center gap-1.5 rounded-full border px-2.5 py-1"
+            title={`${streak} day streak`}
+          >
+            <Flame size={14} className="text-clay" />
             <span className="text-[13px] font-medium text-[#b7ac98]">{streak}</span>
           </div>
           <button
@@ -39,6 +49,7 @@ export function TopBar({
           >
             <Settings2 size={16} />
           </button>
+          {profileSlot}
         </div>
       </div>
       <div className="text-muted-soft mt-2.5 text-[12px]">
