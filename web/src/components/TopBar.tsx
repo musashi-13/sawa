@@ -46,9 +46,9 @@ export function TopBar({
             onClick={onManageStreams}
             aria-label="Manage streams"
             title="Manage streams"
-            className="text-muted transition-colors hover:text-cream-soft active:scale-90"
+            className="text-muted flex items-center transition-colors hover:text-cream-soft active:scale-90"
           >
-            <Settings2 size={16} />
+            <Settings2 size={18} />
           </button>
           {profileSlot}
         </div>

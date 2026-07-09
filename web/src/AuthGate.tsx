@@ -97,15 +97,15 @@ function ProfileControl({
     "text-cream-soft hover:bg-bg-soft flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] transition-colors";
 
   return (
-    <div className="relative">
+    <div className="relative flex items-center">
       <button
         onClick={() => setOpen((o) => !o)}
         aria-label="Menu"
         title="Menu"
         className={
           isSignedIn
-            ? "text-cream-soft transition-colors hover:text-cream active:scale-90"
-            : "text-muted transition-colors hover:text-cream-soft active:scale-90"
+            ? "text-cream-soft flex items-center transition-colors hover:text-cream active:scale-90"
+            : "text-muted flex items-center transition-colors hover:text-cream-soft active:scale-90"
         }
       >
         <UserCircle2 size={18} />
