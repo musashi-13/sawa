@@ -109,24 +109,27 @@ export function HistoryModal({ open, onClose, tasks, streams }: HistoryModalProp
               </button>
             </div>
 
-            {/* Sort toggle */}
-            <div className="border-border-warm mb-4 flex rounded-full border p-0.5">
-              {(["completed", "created"] as SortMode[]).map((m) => {
-                const on = sort === m;
-                return (
-                  <button
-                    key={m}
-                    onClick={() => setSort(m)}
-                    className="flex-1 rounded-full py-1.5 text-[12px] font-medium transition-colors"
-                    style={{
-                      background: on ? "#2c2a22" : "transparent",
-                      color: on ? "#d9b877" : "#8C8270",
-                    }}
-                  >
-                    {m === "completed" ? "By date done" : "By date created"}
-                  </button>
-                );
-              })}
+            {/* Sort control */}
+            <div className="mb-4 flex items-center justify-between">
+              <span className="text-muted-soft text-[12px]">Sort by</span>
+              <div className="border-border-warm flex rounded-full border p-0.5">
+                {(["completed", "created"] as SortMode[]).map((m) => {
+                  const on = sort === m;
+                  return (
+                    <button
+                      key={m}
+                      onClick={() => setSort(m)}
+                      className="rounded-full px-3.5 py-1 text-[12px] font-medium transition-colors"
+                      style={{
+                        background: on ? "#2c2a22" : "transparent",
+                        color: on ? "#d9b877" : "#8C8270",
+                      }}
+                    >
+                      {m === "completed" ? "Completed" : "Created"}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Timeline */}
