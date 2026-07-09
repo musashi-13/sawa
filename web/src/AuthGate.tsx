@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useAuth, useClerk, useSignIn, useUser } from "@clerk/clerk-react";
-import { Github, LogOut, UserCircle2 } from "lucide-react";
+import { Github, History, LogIn, LogOut, UserCircle2 } from "lucide-react";
 import App from "./App";
 import { SawaStamp } from "./components/SawaStamp";
 import { store } from "./store/store";
@@ -19,6 +19,7 @@ export function AuthGate() {
       localStorage.getItem(PROMPT_DISMISSED_KEY) === "1",
   );
   const [promptOpen, setPromptOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const autoShown = useRef(false);
 
   // Bridge the Clerk token into the store so Convex requests are authenticated.
@@ -47,11 +48,18 @@ export function AuthGate() {
   return (
     <>
       <App
-        profileSlot={<ProfileControl onSignIn={() => setPromptOpen(true)} />}
+        profileSlot={
+          <ProfileControl
+            onSignIn={() => setPromptOpen(true)}
+            onHistory={() => setHistoryOpen(true)}
+          />
+        }
         clerkName={isSignedIn ? (user?.firstName ?? undefined) : undefined}
         // Hold the first-run tour until the sign-in sheet is resolved (the user
         // signed in, or dismissed it) so the two overlays don't stack up.
         authPending={!isLoaded || (!isSignedIn && !dismissed)}
+        historyOpen={historyOpen}
+        onCloseHistory={() => setHistoryOpen(false)}
       />
       <SignInPrompt
         open={showPrompt}
@@ -65,39 +73,40 @@ export function AuthGate() {
   );
 }
 
-// The profile control keeps the same 沢-app icon whether signed in or out. Signed
-// out → opens the sign-in sheet. Signed in → a small menu with sign out.
-function ProfileControl({ onSignIn }: { onSignIn: () => void }) {
+// The profile control keeps the same 沢-app icon whether signed in or out, and
+// always opens a small menu: History (for everyone), plus Sign in / Sign out.
+function ProfileControl({
+  onSignIn,
+  onHistory,
+}: {
+  onSignIn: () => void;
+  onHistory: () => void;
+}) {
   const { isSignedIn, user } = useUser();
   const { signOut } = useClerk();
   const [open, setOpen] = useState(false);
 
-  if (!isSignedIn) {
-    return (
-      <button
-        onClick={onSignIn}
-        aria-label="Sign in"
-        title="Sign in"
-        className="text-muted transition-colors hover:text-cream-soft active:scale-90"
-      >
-        <UserCircle2 size={18} />
-      </button>
-    );
-  }
+  const label = isSignedIn
+    ? (user?.primaryEmailAddress?.emailAddress ??
+      user?.fullName ??
+      user?.firstName ??
+      "Signed in")
+    : null;
 
-  const label =
-    user?.primaryEmailAddress?.emailAddress ??
-    user?.fullName ??
-    user?.firstName ??
-    "Signed in";
+  const item =
+    "text-cream-soft hover:bg-bg-soft flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] transition-colors";
 
   return (
     <div className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        aria-label="Account"
-        title="Account"
-        className="text-cream-soft transition-colors hover:text-cream active:scale-90"
+        aria-label="Menu"
+        title="Menu"
+        className={
+          isSignedIn
+            ? "text-cream-soft transition-colors hover:text-cream active:scale-90"
+            : "text-muted transition-colors hover:text-cream-soft active:scale-90"
+        }
       >
         <UserCircle2 size={18} />
       </button>
@@ -105,18 +114,41 @@ function ProfileControl({ onSignIn }: { onSignIn: () => void }) {
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="border-border-warm absolute right-0 top-8 z-50 w-48 rounded-xl border bg-[#211e1b] p-1.5 shadow-[0_12px_28px_-10px_rgba(0,0,0,0.65)]">
-            <div className="text-muted-soft truncate px-2.5 py-1.5 text-[11px]">
-              {label}
-            </div>
+            {label && (
+              <div className="text-muted-soft truncate px-2.5 py-1.5 text-[11px]">
+                {label}
+              </div>
+            )}
             <button
               onClick={() => {
                 setOpen(false);
-                void signOut();
+                onHistory();
               }}
-              className="text-cream-soft hover:bg-bg-soft flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] transition-colors"
+              className={item}
             >
-              <LogOut size={14} /> Sign out
+              <History size={14} /> History
             </button>
+            {isSignedIn ? (
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  void signOut();
+                }}
+                className={item}
+              >
+                <LogOut size={14} /> Sign out
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  onSignIn();
+                }}
+                className={item}
+              >
+                <LogIn size={14} /> Sign in
+              </button>
+            )}
           </div>
         </>
       )}

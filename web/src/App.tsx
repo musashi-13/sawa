@@ -9,6 +9,8 @@ import { AddTaskModal } from "./components/AddTaskModal";
 import { StreamManagerModal } from "./components/StreamManagerModal";
 import { KeyboardHelp } from "./components/KeyboardHelp";
 import { Tutorial } from "./components/Tutorial";
+import { HistoryModal } from "./components/HistoryModal";
+import { UndoToast } from "./components/UndoToast";
 import { resolveAction } from "./lib/keymap";
 
 // Shown once per device on first use; the replay button re-opens it any time.
@@ -24,9 +26,18 @@ interface AppProps {
    * first-run tour waits until the sign-in sheet is resolved before opening.
    */
   authPending?: boolean;
+  /** History sheet open state, driven from the profile menu (Clerk build). */
+  historyOpen?: boolean;
+  onCloseHistory?: () => void;
 }
 
-export default function App({ profileSlot, clerkName, authPending = false }: AppProps) {
+export default function App({
+  profileSlot,
+  clerkName,
+  authPending = false,
+  historyOpen = false,
+  onCloseHistory,
+}: AppProps) {
   const {
     data,
     userName,
@@ -42,6 +53,7 @@ export default function App({ profileSlot, clerkName, authPending = false }: App
     failedCount,
     completedToday,
     streak,
+    lastAction,
     actions,
   } = useSawa();
 
@@ -77,8 +89,8 @@ export default function App({ profileSlot, clerkName, authPending = false }: App
     setTour(false);
   }
 
-  const overlayOpen = modal.open || help || manage || tour;
-  const { nextStream, prevStream, moveActiveStream } = actions;
+  const overlayOpen = modal.open || help || manage || tour || historyOpen;
+  const { nextStream, prevStream, moveActiveStream, undo } = actions;
 
   // Task count per stream, for the manage sheet's delete confirmation.
   const taskCounts = useMemo(() => {
@@ -93,14 +105,23 @@ export default function App({ profileSlot, clerkName, authPending = false }: App
       const tag = (document.activeElement?.tagName ?? "").toLowerCase();
       if (tag === "input" || tag === "textarea") return;
 
+      // Undo the last swipe (Ctrl/Cmd+Z). Handled here since it needs a modifier,
+      // which the key-only keymap doesn't map.
+      if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) {
+        e.preventDefault();
+        undo();
+        return;
+      }
+
       const action = resolveAction(e);
       if (action === "close") {
         setModal((m) => ({ ...m, open: false }));
         setHelp(false);
         setManage(false);
+        onCloseHistory?.();
         return;
       }
-      if (modal.open || manage) return;
+      if (modal.open || manage || historyOpen) return;
 
       switch (action) {
         case "addTask": // let a focused button handle its own Space
@@ -127,7 +148,16 @@ export default function App({ profileSlot, clerkName, authPending = false }: App
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [modal.open, manage, prevStream, nextStream, moveActiveStream]);
+  }, [
+    modal.open,
+    manage,
+    historyOpen,
+    onCloseHistory,
+    prevStream,
+    nextStream,
+    moveActiveStream,
+    undo,
+  ]);
 
   function handleSave(input: NewTaskInput, isBundle: boolean) {
     const targetId = activeStream?.id ?? streams[0]?.id;
@@ -215,6 +245,17 @@ export default function App({ profileSlot, clerkName, authPending = false }: App
       />
       <KeyboardHelp open={help} onClose={() => setHelp(false)} />
       <Tutorial open={tour} onClose={closeTour} />
+      <HistoryModal
+        open={historyOpen}
+        onClose={onCloseHistory ?? noop}
+        tasks={data.tasks}
+        streams={streams}
+      />
+      <UndoToast
+        action={lastAction}
+        onUndo={actions.undo}
+        onDismiss={actions.dismissUndo}
+      />
     </div>
   );
 }

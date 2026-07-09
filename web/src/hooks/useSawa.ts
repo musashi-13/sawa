@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Effort, SawaData, Task, TaskStream } from "../types";
 import { store } from "../store/store";
 import { dayKey, now, uuid } from "../lib/util";
@@ -22,6 +22,18 @@ export interface NewTaskInput {
   childTitles?: string[];
   effort?: Effort;
   important?: boolean;
+}
+
+/** A reversible card action, captured just before it's applied. */
+export interface UndoState {
+  /** Past-tense verb for the toast, e.g. "Completed". */
+  verb: string;
+  /** Affected task's title, for the toast (undefined if it couldn't be found). */
+  title?: string;
+  /** Whole-data snapshot from just before the action — restoring it is the undo. */
+  snapshot: SawaData;
+  /** When the action fired; drives the toast's auto-dismiss timer. */
+  at: number;
 }
 
 /** A switcher entry — a real stream, or the synthetic Failed bin. */
@@ -84,6 +96,37 @@ export function useSawa() {
     [],
   );
 
+  // ── One-level undo for accidental swipes ──────────────────────────────────
+  // Snapshot the whole blob just before a card action; restoring it reverses
+  // any single gesture (complete / postpone / delete / unfold / revive),
+  // including the streak day a completion added. `dataRef` holds the current
+  // committed data so we can grab the pre-state without threading it through.
+  const dataRef = useRef(data);
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
+  const [lastAction, setLastAction] = useState<UndoState | null>(null);
+  const lastActionRef = useRef<UndoState | null>(null);
+  useEffect(() => {
+    lastActionRef.current = lastAction;
+  }, [lastAction]);
+
+  const captureUndo = useCallback((verb: string, id?: string) => {
+    const snapshot = dataRef.current;
+    const title = id ? snapshot.tasks.find((t) => t.id === id)?.title : undefined;
+    setLastAction({ verb, title, snapshot, at: Date.now() });
+  }, []);
+
+  const undo = useCallback(() => {
+    const la = lastActionRef.current;
+    if (!la) return;
+    setData(persist(la.snapshot));
+    setLastAction(null);
+  }, []);
+
+  const dismissUndo = useCallback(() => setLastAction(null), []);
+
   const recordCompletionDay = (d: SawaData): SawaData => {
     const today = dayKey();
     if (d.completionDays.includes(today)) return d;
@@ -91,19 +134,22 @@ export function useSawa() {
   };
 
   const complete = useCallback(
-    (id: string) =>
+    (id: string) => {
+      captureUndo("Completed", id);
       mutate((d) => {
         const t = now();
         const tasks = d.tasks.map((task) =>
           task.id === id ? { ...task, completedAt: t, updatedAt: t } : task,
         );
         return recordCompletionDay({ ...d, tasks });
-      }),
-    [mutate],
+      });
+    },
+    [mutate, captureUndo],
   );
 
   const postpone = useCallback(
-    (id: string) =>
+    (id: string) => {
+      captureUndo("Postponed", id);
       mutate((d) => ({
         ...d,
         tasks: d.tasks.map((task) => {
@@ -112,19 +158,23 @@ export function useSawa() {
           // Stamp `postponedAt` so the penalty can decay from this moment.
           return { ...task, postpones: task.postpones + 1, postponedAt: t, updatedAt: t };
         }),
-      })),
-    [mutate],
+      }));
+    },
+    [mutate, captureUndo],
   );
 
   const remove = useCallback(
-    (id: string) =>
-      mutate((d) => ({ ...d, tasks: d.tasks.filter((task) => task.id !== id) })),
-    [mutate],
+    (id: string) => {
+      captureUndo("Deleted", id);
+      mutate((d) => ({ ...d, tasks: d.tasks.filter((task) => task.id !== id) }));
+    },
+    [mutate, captureUndo],
   );
 
   /** Bring a failed task back to its stack by clearing its (missed) deadline. */
   const revive = useCallback(
-    (id: string) =>
+    (id: string) => {
+      captureUndo("Revived", id);
       mutate((d) => ({
         ...d,
         tasks: d.tasks.map((task) =>
@@ -132,13 +182,15 @@ export function useSawa() {
             ? { ...task, deadline: undefined, postpones: 0, updatedAt: now() }
             : task,
         ),
-      })),
-    [mutate],
+      }));
+    },
+    [mutate, captureUndo],
   );
 
   /** Swipe-right on a bundle: scatter its children into the stack, drop the bundle. */
   const unfoldBundle = useCallback(
-    (id: string) =>
+    (id: string) => {
+      captureUndo("Unfolded", id);
       mutate((d) => {
         const bundle = d.tasks.find((task) => task.id === id);
         if (!bundle || !bundle.isBundle) return d;
@@ -158,8 +210,9 @@ export function useSawa() {
           ...d,
           tasks: [...d.tasks.filter((task) => task.id !== id), ...children],
         };
-      }),
-    [mutate],
+      });
+    },
+    [mutate, captureUndo],
   );
 
   /** Set (or change) the user's display name; ignores an empty value. */
@@ -348,6 +401,7 @@ export function useSawa() {
     failedCount,
     completedToday,
     streak,
+    lastAction,
     actions: {
       complete,
       postpone,
@@ -363,6 +417,8 @@ export function useSawa() {
       deleteStream,
       reorderStreams,
       setUserName,
+      undo,
+      dismissUndo,
     },
   };
 }

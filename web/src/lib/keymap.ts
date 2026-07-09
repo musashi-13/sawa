@@ -25,6 +25,7 @@ export type ActionId =
   | "addTask"
   | "makeBundle"
   | "addItem"
+  | "undo"
   | "toggleHelp"
   | "close";
 
@@ -78,6 +79,8 @@ export const DEFAULT_KEYMAP: KeyBinding[] = [
     help: "In the pane: make it a bundle",
   },
   { action: "addItem", keys: [], display: "↵", help: "Add the item" },
+  // Handled directly in App (needs a modifier, which resolveAction doesn't map).
+  { action: "undo", keys: [], display: "⌘Z / Ctrl+Z", help: "Undo the last swipe" },
   { action: "toggleHelp", keys: ["?"], display: "?", help: "Toggle this help" },
   { action: "close", keys: ["Escape"], display: "Esc", help: "Close" },
 ];
