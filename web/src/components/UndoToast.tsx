@@ -32,12 +32,7 @@ export function UndoToast({ action, onUndo, onDismiss }: UndoToastProps) {
           transition={{ type: "spring", stiffness: 380, damping: 32 }}
         >
           <div className="border-border-warm pointer-events-auto flex max-w-[calc(100vw-32px)] items-center gap-3 rounded-full border bg-[#211e1b] py-2 pl-4 pr-2 shadow-[0_14px_34px_-12px_rgba(0,0,0,0.7)]">
-            <span className="text-cream-soft truncate text-[13px]">
-              {action.verb}
-              {action.title && (
-                <span className="text-muted-soft"> · {action.title}</span>
-              )}
-            </span>
+            <span className="text-cream-soft text-[13px]">{action.verb}</span>
             <button
               onClick={onUndo}
               className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#2c2a22] py-1.5 pl-2.5 pr-3 text-[13px] font-medium text-[#d9b877] transition-transform active:scale-[0.96] hover:bg-[#35322a]"
