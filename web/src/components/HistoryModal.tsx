@@ -102,16 +102,22 @@ export function HistoryModal({ open, onClose, tasks, streams }: HistoryModalProp
             transition={{ type: "spring", stiffness: 320, damping: 30 }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-3 flex items-center justify-between">
               <h2 className="text-cream font-serif text-[18px] font-medium">History</h2>
               <button onClick={onClose} aria-label="Close" className="text-muted">
                 <X size={20} />
               </button>
             </div>
 
+            <p className="text-muted-soft mb-4 text-[12px] leading-[1.5]">
+              A record of the tasks you've finished and missed, across every stream.
+            </p>
+
             {/* Sort control */}
             <div className="mb-4 flex items-center justify-between">
-              <span className="text-muted-soft text-[12px]">Sort by</span>
+              <span className="text-muted-soft text-[11px] font-medium uppercase tracking-[1px]">
+                Sort by
+              </span>
               <div className="border-border-warm flex rounded-full border p-0.5">
                 {(["completed", "created"] as SortMode[]).map((m) => {
                   const on = sort === m;
