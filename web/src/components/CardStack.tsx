@@ -6,7 +6,7 @@ import {
   useTransform,
   type PanInfo,
 } from "motion/react";
-import { Check, CornerDownRight, Layers, RotateCcw, Star, Trash2, X } from "lucide-react";
+import { Check, CornerDownRight, Layers, Repeat, RotateCcw, Star, Trash2, X } from "lucide-react";
 import type { Effort } from "../types";
 import type { Task } from "../types";
 import { DeadlineChip } from "./DeadlineChip";
@@ -366,6 +366,13 @@ function TaskCardContent({ task, failed, onDelete, peek }: TaskCardContentProps)
             style={{ background: "#E9C7C0", color: "#8A2D1C" }}
           >
             {missedLabel(task.deadline)}
+          </span>
+        ) : task.templateId ? (
+          <span
+            className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium"
+            style={{ background: "rgba(120,92,50,0.14)", color: "#8C6B3A" }}
+          >
+            <Repeat size={12} /> Daily
           </span>
         ) : (
           <DeadlineChip task={task} />

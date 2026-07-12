@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Layers, Plus, Star, X } from "lucide-react";
+import { Layers, Plus, Repeat, Star, X } from "lucide-react";
 import type { NewTaskInput } from "../hooks/useSawa";
 import type { Effort } from "../types";
 import { useKeyboardInset } from "../hooks/useKeyboardInset";
@@ -35,6 +35,7 @@ export function AddTaskModal({ open, mode, onClose, onSave }: AddTaskModalProps)
   const [bundle, setBundle] = useState(false);
   const [effort, setEffort] = useState<Effort | undefined>(undefined);
   const [important, setImportant] = useState(false);
+  const [repeat, setRepeat] = useState(false);
 
   // Reset each time the pane opens; honour how it was opened (task vs bundle).
   useEffect(() => {
@@ -46,6 +47,7 @@ export function AddTaskModal({ open, mode, onClose, onSave }: AddTaskModalProps)
       setChildren(["", ""]);
       setEffort(undefined);
       setImportant(false);
+      setRepeat(false);
     }
   }, [open, mode]);
 
@@ -54,7 +56,16 @@ export function AddTaskModal({ open, mode, onClose, onSave }: AddTaskModalProps)
     const childTitles = children.map((c) => c.trim()).filter(Boolean);
     if (bundle && childTitles.length === 0) return;
     onSave(
-      { title, description, deadline: toEpoch(deadline), childTitles, effort, important },
+      {
+        title,
+        description,
+        // A daily task has no fixed calendar deadline.
+        deadline: repeat ? undefined : toEpoch(deadline),
+        childTitles,
+        effort,
+        important,
+        repeat: repeat ? "daily" : undefined,
+      },
       bundle,
     );
     onClose();
@@ -113,22 +124,43 @@ export function AddTaskModal({ open, mode, onClose, onSave }: AddTaskModalProps)
                 }}
               />
 
-              {/* Tab from the title lands here — Enter/Space converts to a bundle. */}
-              <button
-                type="button"
-                aria-pressed={bundle}
-                onClick={() => setBundle((b) => !b)}
-                className="border-border-warm flex w-full items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-left transition-colors"
-                style={{
-                  background: bundle ? "#2c2a22" : "transparent",
-                  borderColor: bundle ? "#8C6B3A" : undefined,
-                }}
-              >
-                <Layers size={16} className={bundle ? "text-gold" : "text-muted"} />
-                <span className="text-[13px] text-cream-soft">
-                  {bundle ? "It's a bundle — add tasks inside" : "Make it a bundle"}
-                </span>
-              </button>
+              {/* Tab from the title lands here — Enter/Space converts to a bundle.
+                  Bundle and Repeat are mutually exclusive. */}
+              {!repeat && (
+                <button
+                  type="button"
+                  aria-pressed={bundle}
+                  onClick={() => setBundle((b) => !b)}
+                  className="border-border-warm flex w-full items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-left transition-colors"
+                  style={{
+                    background: bundle ? "#2c2a22" : "transparent",
+                    borderColor: bundle ? "#8C6B3A" : undefined,
+                  }}
+                >
+                  <Layers size={16} className={bundle ? "text-gold" : "text-muted"} />
+                  <span className="text-[13px] text-cream-soft">
+                    {bundle ? "It's a bundle — add tasks inside" : "Make it a bundle"}
+                  </span>
+                </button>
+              )}
+
+              {!bundle && (
+                <button
+                  type="button"
+                  aria-pressed={repeat}
+                  onClick={() => setRepeat((r) => !r)}
+                  className="border-border-warm flex w-full items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-left transition-colors"
+                  style={{
+                    background: repeat ? "#2c2a22" : "transparent",
+                    borderColor: repeat ? "#8C6B3A" : undefined,
+                  }}
+                >
+                  <Repeat size={16} className={repeat ? "text-gold" : "text-muted"} />
+                  <span className="text-[13px] text-cream-soft">
+                    {repeat ? "Repeats every day" : "Repeat daily"}
+                  </span>
+                </button>
+              )}
 
               <textarea
                 className={`${inputClass} min-h-[64px] resize-none`}
@@ -137,18 +169,21 @@ export function AddTaskModal({ open, mode, onClose, onSave }: AddTaskModalProps)
                 onChange={(e) => setDescription(e.target.value)}
               />
 
-              <label className="text-muted block text-[12px]">
-                Deadline (optional)
-                <input
-                  type="datetime-local"
-                  // iOS clips the value in date/time inputs unless the internal
-                  // value box is given room + left-aligned; min-height + the
-                  // ::-webkit-date-and-time-value tweaks fix the crop.
-                  className={`${inputClass} mt-1.5 block min-h-[48px] appearance-none [&::-webkit-date-and-time-value]:m-0 [&::-webkit-date-and-time-value]:text-left`}
-                  value={deadline}
-                  onChange={(e) => setDeadline(e.target.value)}
-                />
-              </label>
+              {/* A daily task has no fixed deadline — each day's copy just appears. */}
+              {!repeat && (
+                <label className="text-muted block text-[12px]">
+                  Deadline (optional)
+                  <input
+                    type="datetime-local"
+                    // iOS clips the value in date/time inputs unless the internal
+                    // value box is given room + left-aligned; min-height + the
+                    // ::-webkit-date-and-time-value tweaks fix the crop.
+                    className={`${inputClass} mt-1.5 block min-h-[48px] appearance-none [&::-webkit-date-and-time-value]:m-0 [&::-webkit-date-and-time-value]:text-left`}
+                    value={deadline}
+                    onChange={(e) => setDeadline(e.target.value)}
+                  />
+                </label>
+              )}
 
               {/* Effort + importance — the two ranking signals. */}
               <div className="flex items-end gap-3">

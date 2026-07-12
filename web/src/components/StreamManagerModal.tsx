@@ -5,8 +5,8 @@ import {
   motion,
   useDragControls,
 } from "motion/react";
-import { Check, Compass, GripVertical, Plus, Trash2, X } from "lucide-react";
-import type { TaskStream } from "../types";
+import { Check, Compass, GripVertical, Plus, Repeat, Trash2, X } from "lucide-react";
+import type { Task, TaskStream } from "../types";
 import { useKeyboardInset } from "../hooks/useKeyboardInset";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -38,6 +38,9 @@ interface StreamManagerModalProps {
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
   onReorder: (orderedIds: string[]) => void;
+  /** Recurring templates, to view and stop. */
+  templates: Task[];
+  onStopRepeat: (id: string) => void;
   /** Replay the first-run walkthrough. */
   onReplayTour: () => void;
 }
@@ -53,6 +56,8 @@ export function StreamManagerModal({
   onRename,
   onDelete,
   onReorder,
+  templates,
+  onStopRepeat,
   onReplayTour,
 }: StreamManagerModalProps) {
   const keyboardInset = useKeyboardInset();
@@ -194,6 +199,39 @@ export function StreamManagerModal({
             >
               <Plus size={16} /> New stream
             </button>
+
+            {/* Repeating tasks */}
+            {templates.length > 0 && (
+              <>
+                <div className="border-border-warm my-5 border-t" />
+                <label className="text-muted-soft mb-1.5 block text-[11px] font-medium uppercase tracking-[1px]">
+                  Repeating
+                </label>
+                <p className="text-muted-soft mb-3 text-[12px] leading-[1.5]">
+                  These reappear as a fresh card every day. Stop one to end its
+                  daily repeat.
+                </p>
+                <div className="space-y-2">
+                  {templates.map((t) => (
+                    <div
+                      key={t.id}
+                      className="border-border-warm bg-bg flex items-center gap-2 rounded-xl border px-3 py-2"
+                    >
+                      <Repeat size={15} className="text-gold shrink-0" />
+                      <span className="text-cream-soft min-w-0 flex-1 truncate text-[14px]">
+                        {t.title}
+                      </span>
+                      <button
+                        onClick={() => onStopRepeat(t.id)}
+                        className="text-muted shrink-0 rounded-full px-2 py-1 text-[12px] transition-colors hover:text-[#C0584A]"
+                      >
+                        Stop
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
 
             {/* Divider + walkthrough replay */}
             <div className="border-border-warm my-5 border-t" />

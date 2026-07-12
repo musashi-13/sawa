@@ -4,6 +4,7 @@ import { store } from "../store/store";
 import { dayKey, now, uuid } from "../lib/util";
 import { isFailed } from "../lib/ranking";
 import { orderedByQueue, reindex } from "../lib/queue";
+import { generateDailyInstances, makeInstance } from "../lib/recurrence";
 import { currentStreak } from "../lib/streak";
 
 // Every write goes through the queue engine first, so the persisted `order`
@@ -22,6 +23,8 @@ export interface NewTaskInput {
   childTitles?: string[];
   effort?: Effort;
   important?: boolean;
+  /** When set, create a recurring template instead of a one-off task. */
+  repeat?: "daily";
 }
 
 /** A reversible card action, captured just before it's applied. */
@@ -53,12 +56,13 @@ export function useSawa() {
   // React to external updates (other tabs today; sync engine later).
   useEffect(() => store.subscribe((incoming) => setData(incoming)), []);
 
-  // App-open: advance the queue snapshot once (deadlines may have crossed
-  // boundaries overnight), persisting only if the order actually changed.
+  // App-open: materialize today's recurring instances (retiring stale ones),
+  // then advance the queue snapshot. Persist only if something actually changed.
   useEffect(() => {
     setData((prev) => {
-      const { data, changed } = reindex(prev);
-      if (!changed) return prev;
+      const gen = generateDailyInstances(prev);
+      const { data, changed } = reindex(gen.data);
+      if (!gen.changed && !changed) return prev;
       store.save(data);
       return data;
     });
@@ -226,6 +230,27 @@ export function useSawa() {
     (streamId: string, input: NewTaskInput, isBundle = false) =>
       mutate((d) => {
         const t = now();
+
+        // A daily task is stored as a hidden template + today's first instance,
+        // so it shows up immediately and then regenerates each day on open.
+        if (input.repeat === "daily" && !isBundle) {
+          const template: Task = {
+            id: uuid(),
+            streamId,
+            title: input.title.trim(),
+            description: input.description?.trim() || undefined,
+            isBundle: false,
+            effort: input.effort,
+            important: input.important || undefined,
+            repeat: "daily",
+            postpones: 0,
+            createdAt: t,
+            updatedAt: t,
+          };
+          const instance = makeInstance(template, dayKey(t), t);
+          return { ...d, tasks: [...d.tasks, template, instance] };
+        }
+
         const task: Task = {
           id: uuid(),
           streamId,
@@ -358,6 +383,7 @@ export function useSawa() {
           data.tasks.filter(
             (t) =>
               t.streamId === activeStream.id &&
+              t.repeat === undefined &&
               t.completedAt === undefined &&
               !isFailed(t, t0),
           ),
@@ -365,9 +391,11 @@ export function useSawa() {
         )
       : [];
 
-  // Counts for the active view.
+  // Counts for the active view (templates excluded — they aren't real cards).
   const streamTasks = activeStream
-    ? data.tasks.filter((t) => t.streamId === activeStream.id)
+    ? data.tasks.filter(
+        (t) => t.streamId === activeStream.id && t.repeat === undefined,
+      )
     : [];
   const today = dayKey();
   const leftCount = isFailedView
@@ -385,11 +413,17 @@ export function useSawa() {
 
   const streak = currentStreak(data.completionDays);
 
+  // Recurring templates, for the "Repeating" management section.
+  const templates = data.tasks
+    .filter((t) => t.repeat === "daily")
+    .sort((a, b) => a.createdAt - b.createdAt);
+
   return {
     data,
     userName: data.userName,
     streams,
     views,
+    templates,
     activeStream,
     activeViewName: activeView?.name ?? "—",
     isFailedView,

@@ -53,6 +53,7 @@ export default function App({
     failedCount,
     completedToday,
     streak,
+    templates,
     lastAction,
     actions,
   } = useSawa();
@@ -241,6 +242,8 @@ export default function App({
         onRename={actions.renameStream}
         onDelete={actions.deleteStream}
         onReorder={actions.reorderStreams}
+        templates={templates}
+        onStopRepeat={actions.remove}
         onReplayTour={() => setTour(true)}
       />
       <KeyboardHelp open={help} onClose={() => setHelp(false)} />
