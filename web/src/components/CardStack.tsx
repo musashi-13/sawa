@@ -9,6 +9,7 @@ import {
 import { Check, CornerDownRight, Layers, Repeat, RotateCcw, Star, Trash2, X } from "lucide-react";
 import type { Effort } from "../types";
 import type { Task } from "../types";
+import type { CardTheme } from "../lib/cardThemes";
 import { DeadlineChip } from "./DeadlineChip";
 import { resolveAction } from "../lib/keymap";
 
@@ -18,7 +19,8 @@ const SWIPE_THRESHOLD = 100;
 const VELOCITY_THRESHOLD = 500;
 const STEP = 12; // vertical peek between stacked cards
 const SCALE_STEP = 0.05;
-const PARCHMENT = "linear-gradient(158deg,#E6DDC9 0%,#DBD0B6 55%,#CDC0A3 100%)";
+// Deep peek edges stay neutral-dark regardless of theme (they're barely visible
+// shadow slabs behind the top two cards).
 const SLAB = ["#4E473C", "#39342D", "#322E2A", "#2C2925"];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -34,6 +36,7 @@ const SLAB = ["#4E473C", "#39342D", "#322E2A", "#2C2925"];
 
 interface CardStackProps {
   tasks: Task[];
+  theme: CardTheme;
   mode?: StackMode;
   keyboardEnabled?: boolean;
   onComplete: (id: string) => void;
@@ -44,6 +47,7 @@ interface CardStackProps {
 
 export function CardStack({
   tasks,
+  theme,
   mode = "stack",
   keyboardEnabled = true,
   onComplete,
@@ -122,7 +126,7 @@ export function CardStack({
       {/* Static peek cards behind the top (back-to-front). */}
       {peeks
         .map((task, i) => (
-          <PeekCard key={task.id} task={task} depth={i + 1} failed={failed} />
+          <PeekCard key={task.id} task={task} depth={i + 1} failed={failed} theme={theme} />
         ))
         .reverse()}
 
@@ -135,10 +139,8 @@ export function CardStack({
             style={{
               zIndex: 50,
               transformOrigin: "bottom center",
-              background: PARCHMENT,
-              border: top.isBundle
-                ? "1px solid #D8C9A8"
-                : "1px solid rgba(120,92,50,0.18)",
+              background: theme.bg,
+              border: `1px solid ${top.isBundle ? theme.borderBundle : theme.border}`,
               boxShadow: "0 18px 40px -16px rgba(20,14,8,0.6)",
               touchAction: "pan-y",
               cursor: "grab",
@@ -166,7 +168,12 @@ export function CardStack({
             onDrag={(_, info) => hintX.set(info.offset.x)}
             onDragEnd={handleDragEnd}
           >
-            <TaskCardContent task={top} failed={failed} onDelete={() => onDelete(top.id)} />
+            <TaskCardContent
+              task={top}
+              failed={failed}
+              theme={theme}
+              onDelete={() => onDelete(top.id)}
+            />
           </motion.div>
         ) : (
           <EmptyState key="empty" />
@@ -221,12 +228,14 @@ function PeekCard({
   task,
   depth,
   failed,
+  theme,
 }: {
   task: Task;
   depth: number;
   failed: boolean;
+  theme: CardTheme;
 }) {
-  const parchment = depth === 1;
+  const paper = depth === 1;
   return (
     <div
       className="pointer-events-none absolute inset-x-0 bottom-0 h-[185px] overflow-hidden rounded-[22px]"
@@ -234,12 +243,12 @@ function PeekCard({
         zIndex: 40 - depth,
         transformOrigin: "bottom center",
         transform: `translateY(${-depth * STEP}px) scale(${1 - depth * SCALE_STEP})`,
-        background: parchment ? PARCHMENT : SLAB[Math.min(depth - 2, SLAB.length - 1)],
-        filter: parchment ? "brightness(0.9)" : undefined,
-        border: parchment ? "1px solid rgba(120,92,50,0.14)" : "none",
+        background: paper ? theme.bg : SLAB[Math.min(depth - 2, SLAB.length - 1)],
+        filter: paper ? "brightness(0.9)" : undefined,
+        border: paper ? `1px solid ${theme.border}` : "none",
       }}
     >
-      {parchment && <TaskCardContent task={task} failed={failed} peek />}
+      {paper && <TaskCardContent task={task} failed={failed} theme={theme} peek />}
     </div>
   );
 }
@@ -264,6 +273,7 @@ function EmptyState() {
 interface TaskCardContentProps {
   task: Task;
   failed: boolean;
+  theme: CardTheme;
   onDelete?: () => void;
   peek?: boolean;
 }
@@ -271,12 +281,12 @@ interface TaskCardContentProps {
 const EFFORT_LABEL: Record<Effort, string> = { S: "Small", M: "Medium", L: "Large" };
 
 /** A subtle size marker on the card. */
-function EffortChip({ effort }: { effort: Effort }) {
+function EffortChip({ effort, theme }: { effort: Effort; theme: CardTheme }) {
   return (
     <span
       title={`${EFFORT_LABEL[effort]} effort`}
       className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full text-[10px] font-semibold"
-      style={{ background: "rgba(120,92,50,0.14)", color: "#8C6B3A" }}
+      style={{ background: theme.chipBg, color: theme.chipInk }}
     >
       {effort}
     </span>
@@ -294,7 +304,7 @@ function missedLabel(deadline?: number): string {
   );
 }
 
-function TaskCardContent({ task, failed, onDelete, peek }: TaskCardContentProps) {
+function TaskCardContent({ task, failed, theme, onDelete, peek }: TaskCardContentProps) {
   const childCount = task.childTitles?.length ?? 0;
   const accent = task.isBundle ? "#B8915A" : failed ? "#C0584A" : "#C96442";
   return (
@@ -304,8 +314,7 @@ function TaskCardContent({ task, failed, onDelete, peek }: TaskCardContentProps)
         className="pointer-events-none absolute inset-0"
         style={{
           zIndex: 0,
-          backgroundImage:
-            "repeating-linear-gradient(90deg, rgba(120,92,50,0.045) 0 1px, transparent 1px 7px)",
+          backgroundImage: `repeating-linear-gradient(90deg, ${theme.grain} 0 1px, transparent 1px 7px)`,
         }}
       />
       <div
@@ -316,7 +325,7 @@ function TaskCardContent({ task, failed, onDelete, peek }: TaskCardContentProps)
       <span
         aria-hidden
         className="pointer-events-none absolute -bottom-5 right-0 select-none font-serif leading-none"
-        style={{ zIndex: 0, fontSize: 110, color: "rgba(43,39,34,0.05)" }}
+        style={{ zIndex: 0, fontSize: 110, color: theme.watermark }}
       >
         沢
       </span>
@@ -325,7 +334,8 @@ function TaskCardContent({ task, failed, onDelete, peek }: TaskCardContentProps)
         <button
           onClick={onDelete}
           aria-label="Delete task"
-          className="absolute right-3 top-3 z-10 text-[#a89e89] transition-colors hover:text-[#9C4A2C]"
+          className="absolute right-3 top-3 z-10 transition-colors hover:text-[#9C4A2C]"
+          style={{ color: theme.deleteInk }}
         >
           <X size={16} />
         </button>
@@ -349,12 +359,18 @@ function TaskCardContent({ task, failed, onDelete, peek }: TaskCardContentProps)
         <div className="mt-1" />
       )}
 
-      <div className="relative z-10 pr-5 font-serif text-[20px] leading-[1.3] text-[#2B2722]">
+      <div
+        className="relative z-10 pr-5 font-serif text-[20px] leading-[1.3]"
+        style={{ color: theme.ink }}
+      >
         {task.title}
       </div>
 
       {task.description && (
-        <p className="relative z-10 mt-2 line-clamp-2 pr-3 text-[13px] leading-[1.45] text-[#6F6450]">
+        <p
+          className="relative z-10 mt-2 line-clamp-2 pr-3 text-[13px] leading-[1.45]"
+          style={{ color: theme.inkSoft }}
+        >
           {task.description}
         </p>
       )}
@@ -370,14 +386,14 @@ function TaskCardContent({ task, failed, onDelete, peek }: TaskCardContentProps)
         ) : task.templateId ? (
           <span
             className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium"
-            style={{ background: "rgba(120,92,50,0.14)", color: "#8C6B3A" }}
+            style={{ background: theme.chipBg, color: theme.chipInk }}
           >
             <Repeat size={12} /> Daily
           </span>
         ) : (
           <DeadlineChip task={task} />
         )}
-        {task.effort && <EffortChip effort={task.effort} />}
+        {task.effort && <EffortChip effort={task.effort} theme={theme} />}
         {task.important && (
           <Star
             size={15}

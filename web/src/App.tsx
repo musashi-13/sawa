@@ -12,6 +12,7 @@ import { Tutorial } from "./components/Tutorial";
 import { HistoryModal } from "./components/HistoryModal";
 import { UndoToast } from "./components/UndoToast";
 import { resolveAction } from "./lib/keymap";
+import { getCardTheme } from "./lib/cardThemes";
 
 // Shown once per device on first use; the replay button re-opens it any time.
 const TOUR_DONE_KEY = "sawa.tour.v1.done";
@@ -54,9 +55,12 @@ export default function App({
     completedToday,
     streak,
     templates,
+    cardTheme,
     lastAction,
     actions,
   } = useSawa();
+
+  const theme = getCardTheme(cardTheme);
 
   const [modal, setModal] = useState<{ open: boolean; mode: "task" | "bundle" }>({
     open: false,
@@ -191,6 +195,7 @@ export default function App({
               // instead of cross-fading old + new cards (which left a blank card).
               key={activeStream?.id ?? "failed"}
               tasks={activeTasks}
+              theme={theme}
               mode={isFailedView ? "failed" : "stack"}
               keyboardEnabled={!overlayOpen}
               onComplete={isFailedView ? actions.revive : actions.complete}
@@ -244,6 +249,8 @@ export default function App({
         onReorder={actions.reorderStreams}
         templates={templates}
         onStopRepeat={actions.remove}
+        cardThemeId={cardTheme}
+        onSelectTheme={actions.setCardTheme}
         onReplayTour={() => setTour(true)}
       />
       <KeyboardHelp open={help} onClose={() => setHelp(false)} />

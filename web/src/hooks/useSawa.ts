@@ -226,6 +226,12 @@ export function useSawa() {
     [mutate],
   );
 
+  /** Choose the global card theme. */
+  const setCardTheme = useCallback(
+    (id: string) => mutate((d) => ({ ...d, cardTheme: id })),
+    [mutate],
+  );
+
   const addTask = useCallback(
     (streamId: string, input: NewTaskInput, isBundle = false) =>
       mutate((d) => {
@@ -421,6 +427,7 @@ export function useSawa() {
   return {
     data,
     userName: data.userName,
+    cardTheme: data.cardTheme,
     streams,
     views,
     templates,
@@ -451,6 +458,7 @@ export function useSawa() {
       deleteStream,
       reorderStreams,
       setUserName,
+      setCardTheme,
       undo,
       dismissUndo,
     },

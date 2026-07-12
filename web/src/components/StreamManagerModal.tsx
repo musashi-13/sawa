@@ -8,6 +8,7 @@ import {
 import { Check, Compass, GripVertical, Plus, Repeat, Trash2, X } from "lucide-react";
 import type { Task, TaskStream } from "../types";
 import { useKeyboardInset } from "../hooks/useKeyboardInset";
+import { CARD_THEMES, DEFAULT_CARD_THEME_ID } from "../lib/cardThemes";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Settings sheet: edit the user's name, plus manage streams (rename, reorder by
@@ -41,6 +42,9 @@ interface StreamManagerModalProps {
   /** Recurring templates, to view and stop. */
   templates: Task[];
   onStopRepeat: (id: string) => void;
+  /** Selected card theme id + setter. */
+  cardThemeId?: string;
+  onSelectTheme: (id: string) => void;
   /** Replay the first-run walkthrough. */
   onReplayTour: () => void;
 }
@@ -58,8 +62,11 @@ export function StreamManagerModal({
   onReorder,
   templates,
   onStopRepeat,
+  cardThemeId,
+  onSelectTheme,
   onReplayTour,
 }: StreamManagerModalProps) {
+  const selectedTheme = cardThemeId ?? DEFAULT_CARD_THEME_ID;
   const keyboardInset = useKeyboardInset();
   const [rows, setRows] = useState<Row[]>([]);
   const [nameDraft, setNameDraft] = useState("");
@@ -199,6 +206,47 @@ export function StreamManagerModal({
             >
               <Plus size={16} /> New stream
             </button>
+
+            {/* Card themes */}
+            <div className="border-border-warm my-5 border-t" />
+            <label className="text-muted-soft mb-1.5 block text-[11px] font-medium uppercase tracking-[1px]">
+              Card theme
+            </label>
+            <p className="text-muted-soft mb-3 text-[12px] leading-[1.5]">
+              The paper your task cards are printed on.
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {CARD_THEMES.map((t) => {
+                const on = selectedTheme === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => onSelectTheme(t.id)}
+                    aria-pressed={on}
+                    className="flex flex-col items-stretch gap-1.5 rounded-xl p-1 transition-transform active:scale-[0.97]"
+                    style={{
+                      background: on ? "#2c2a22" : "transparent",
+                      outline: on ? "1.5px solid #C96442" : "1.5px solid transparent",
+                    }}
+                  >
+                    <span
+                      className="relative h-11 w-full overflow-hidden rounded-lg"
+                      style={{ background: t.bg, border: `1px solid ${t.border}` }}
+                    >
+                      {/* mini clay accent strip, echoing a real card */}
+                      <span
+                        className="absolute bottom-0 left-0 top-0 w-[3px]"
+                        style={{ background: "#C96442" }}
+                      />
+                    </span>
+                    <span className="flex items-center justify-center gap-1 text-[11px] text-cream-soft">
+                      {on && <Check size={11} className="text-clay" />}
+                      {t.name}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
 
             {/* Repeating tasks */}
             {templates.length > 0 && (

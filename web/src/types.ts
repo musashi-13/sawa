@@ -110,5 +110,8 @@ export interface SawaData {
    * persistence + future sync path as the rest of the data.
    */
   userName?: string;
+  /** Id of the selected card theme (see `lib/cardThemes.ts`). Global for now;
+   *  per-stream themes can layer on later. */
+  cardTheme?: string;
   version: number;
 }
