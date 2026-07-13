@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { Settings2 } from "lucide-react";
 import { SawaStamp } from "./SawaStamp";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -16,7 +17,8 @@ interface Step {
   /** Value of the `data-tour` attribute on the element to spotlight. */
   target: string;
   title: string;
-  /** Body copy; wrap words in **double asterisks** to emphasize them. */
+  /** Body copy; wrap words in **double asterisks** to emphasize them, and use
+   *  the `[settings]` token to inline the Settings icon. */
   body: string;
   /** Pill-shaped targets get a fully-rounded highlight; others a soft radius. */
   pill?: boolean;
@@ -32,13 +34,7 @@ const STEPS: Step[] = [
   {
     target: "streams",
     title: "Flow between streams",
-    body: "Your tasks live in **streams**. Sawa starts you with three: Daily, Projects and Errands. Use the arrows to move between them, and the **gear** up top to rename, reorder, add or remove them.",
-  },
-  {
-    target: "streak",
-    pill: true,
-    title: "Keep the streak alive",
-    body: "Finish at least **one task a day** and your streak grows. Miss a day and it resets, a gentle nudge to keep the stream moving.",
+    body: "Your tasks live in **streams**. Sawa starts you with three: Daily, Projects and Errands. Use the arrows to move between them, and the [settings] button up top to rename, reorder, add or remove them.",
   },
   {
     target: "bundle",
@@ -46,21 +42,33 @@ const STEPS: Step[] = [
     title: "Bundle bigger quests",
     body: "A **bundle** (束) holds several subtasks. Swipe it right to **unfold** its pieces into the stack as separate cards. No fixed order, just pick what you can do now.",
   },
+  {
+    target: "streak",
+    pill: true,
+    title: "Keep the streak alive",
+    body: "Finish at least **one task a day** and your streak grows. Miss a day and it resets.",
+  },
 ];
 
 const PAD = 8; // breathing room around the spotlit element
 const DIM = "0 0 0 9999px rgba(13,10,8,0.76)";
 
 function renderBody(text: string) {
-  return text.split(/(\*\*[^*]+\*\*)/g).map((seg, i) =>
-    seg.startsWith("**") && seg.endsWith("**") ? (
-      <strong key={i} className="text-cream font-medium">
-        {seg.slice(2, -2)}
-      </strong>
-    ) : (
-      <span key={i}>{seg}</span>
-    ),
-  );
+  return text.split(/(\*\*[^*]+\*\*|\[settings\])/g).map((seg, i) => {
+    if (seg === "[settings]") {
+      return (
+        <Settings2 key={i} size={14} className="text-cream mx-0.5 inline align-middle" />
+      );
+    }
+    if (seg.startsWith("**") && seg.endsWith("**")) {
+      return (
+        <strong key={i} className="text-cream font-medium">
+          {seg.slice(2, -2)}
+        </strong>
+      );
+    }
+    return <span key={i}>{seg}</span>;
+  });
 }
 
 interface TutorialProps {

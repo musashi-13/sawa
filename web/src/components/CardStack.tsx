@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AnimatePresence,
   motion,
@@ -22,6 +22,9 @@ const SCALE_STEP = 0.05;
 // Deep peek edges stay neutral-dark regardless of theme (they're barely visible
 // shadow slabs behind the top two cards).
 const SLAB = ["#4E473C", "#39342D", "#322E2A", "#2C2925"];
+// Near-black cards that drop into the back of the stack when a bundle unfolds —
+// always three, regardless of how many subtasks it holds.
+const SCATTER = ["#26221E", "#1F1B18", "#181512"];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CardStack — a single interactive top card over static peek cards.
@@ -69,6 +72,16 @@ export function CardStack({
   // Exit direction for the leaving card (set the instant a swipe commits).
   const exitDir = useMotionValue(1);
 
+  // One-shot "cards added to the back" flourish when a bundle unfolds.
+  const [scattering, setScattering] = useState(false);
+  const scatterTimer = useRef<number | undefined>(undefined);
+  function triggerScatter() {
+    setScattering(true);
+    window.clearTimeout(scatterTimer.current);
+    scatterTimer.current = window.setTimeout(() => setScattering(false), 650);
+  }
+  useEffect(() => () => window.clearTimeout(scatterTimer.current), []);
+
   function act(dir: 1 | -1, task: Task) {
     if (dir > 0) {
       if (failed) onComplete(task.id);
@@ -84,6 +97,8 @@ export function CardStack({
     if (!top) return;
     hintX.set(0);
     exitDir.set(dir);
+    // Unfolding a bundle scatters new cards into the stack — play the flourish.
+    if (dir > 0 && !failed && top.isBundle) triggerScatter();
     act(dir, top);
   }
 
@@ -129,6 +144,31 @@ export function CardStack({
           <PeekCard key={task.id} task={task} depth={i + 1} failed={failed} theme={theme} />
         ))
         .reverse()}
+
+      {/* Bundle unfold: three dark cards drop into the back of the stack. They
+          sit above the real (paper) peeks briefly, then fade to reveal them. */}
+      <AnimatePresence>
+        {scattering &&
+          [0, 1, 2].map((i) => {
+            const depth = i + 1;
+            return (
+              <motion.div
+                key={`scatter-${i}`}
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-[185px] rounded-[22px]"
+                style={{
+                  zIndex: 47 - i,
+                  transformOrigin: "bottom center",
+                  background: SCATTER[i],
+                  boxShadow: "0 -6px 16px -10px rgba(0,0,0,0.6)",
+                }}
+                initial={{ y: 28, opacity: 0, scale: 1 - depth * SCALE_STEP }}
+                animate={{ y: -depth * STEP, opacity: 1, scale: 1 - depth * SCALE_STEP }}
+                exit={{ opacity: 0, transition: { duration: 0.25 } }}
+                transition={{ delay: i * 0.09, type: "spring", stiffness: 320, damping: 30 }}
+              />
+            );
+          })}
+      </AnimatePresence>
 
       <AnimatePresence custom={exitDir.get()} initial={false}>
         {top ? (
@@ -278,17 +318,24 @@ interface TaskCardContentProps {
   peek?: boolean;
 }
 
-const EFFORT_LABEL: Record<Effort, string> = { S: "Small", M: "Medium", L: "Large" };
+const EFFORT_LABEL: Record<Effort, string> = { S: "Quick", M: "Medium", L: "Long" };
+const EFFORT_DOTS: Record<Effort, number> = { S: 1, M: 2, L: 3 };
 
-/** A subtle size marker on the card. */
+/** A subtle size marker on the card: 1–3 dots for quick → long. */
 function EffortChip({ effort, theme }: { effort: Effort; theme: CardTheme }) {
   return (
     <span
       title={`${EFFORT_LABEL[effort]} effort`}
-      className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full text-[10px] font-semibold"
-      style={{ background: theme.chipBg, color: theme.chipInk }}
+      className="inline-flex shrink-0 items-center gap-[3px] rounded-full px-2 py-[6px]"
+      style={{ background: theme.chipBg }}
     >
-      {effort}
+      {Array.from({ length: EFFORT_DOTS[effort] }).map((_, i) => (
+        <span
+          key={i}
+          className="h-[4px] w-[4px] rounded-full"
+          style={{ background: theme.chipInk }}
+        />
+      ))}
     </span>
   );
 }

@@ -5,10 +5,11 @@ import type { NewTaskInput } from "../hooks/useSawa";
 import type { Effort } from "../types";
 import { useKeyboardInset } from "../hooks/useKeyboardInset";
 
-const EFFORTS: { value: Effort; label: string; hint: string }[] = [
-  { value: "S", label: "S", hint: "Small — a quick win" },
-  { value: "M", label: "M", hint: "Medium" },
-  { value: "L", label: "L", hint: "Large — a longer haul" },
+// Effort as 1–3 dots, with a plain-language label. The scale maps to rough time.
+const EFFORTS: { value: Effort; dots: number; label: string; hint: string }[] = [
+  { value: "S", dots: 1, label: "Quick", hint: "Quick — around 15 minutes" },
+  { value: "M", dots: 2, label: "Medium", hint: "Medium — around an hour" },
+  { value: "L", dots: 3, label: "Long", hint: "Long — a few hours" },
 ];
 
 interface AddTaskModalProps {
@@ -203,14 +204,23 @@ export function AddTaskModal({ open, mode, onClose, onSave }: AddTaskModalProps)
                           onClick={() =>
                             setEffort((cur) => (cur === e.value ? undefined : e.value))
                           }
-                          className="flex-1 rounded-xl border py-2.5 text-[14px] font-medium transition-colors"
+                          className="flex flex-1 flex-col items-center gap-1.5 rounded-xl border py-2 transition-colors"
                           style={{
                             background: on ? "#2c2a22" : "transparent",
                             borderColor: on ? "#8C6B3A" : "#3a352f",
                             color: on ? "#d9b877" : "#8C8270",
                           }}
                         >
-                          {e.label}
+                          <span className="flex items-center gap-[3px]">
+                            {Array.from({ length: e.dots }).map((_, i) => (
+                              <span
+                                key={i}
+                                className="h-[5px] w-[5px] rounded-full"
+                                style={{ background: "currentColor" }}
+                              />
+                            ))}
+                          </span>
+                          <span className="text-[11px] font-medium">{e.label}</span>
                         </button>
                       );
                     })}
