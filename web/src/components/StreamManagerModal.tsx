@@ -229,14 +229,38 @@ export function StreamManagerModal({
                       outline: on ? "1.5px solid #C96442" : "1.5px solid transparent",
                     }}
                   >
+                    {/* A simplified mock of a real card, so the ink/paper contrast
+                        of each theme is visible at a glance. */}
                     <span
-                      className="relative h-11 w-full overflow-hidden rounded-lg"
+                      className="relative block h-[54px] w-full overflow-hidden rounded-lg"
                       style={{ background: t.bg, border: `1px solid ${t.border}` }}
                     >
-                      {/* mini clay accent strip, echoing a real card */}
                       <span
                         className="absolute bottom-0 left-0 top-0 w-[3px]"
                         style={{ background: "#C96442" }}
+                      />
+                      {/* 沢 watermark */}
+                      <span
+                        className="absolute -bottom-2 right-0 select-none font-serif leading-none"
+                        style={{ fontSize: 34, color: t.watermark }}
+                      >
+                        沢
+                      </span>
+                      {/* title + subtitle ink bars */}
+                      <span className="absolute left-[11px] right-[9px] top-[13px] flex flex-col gap-[5px]">
+                        <span
+                          className="h-[6px] w-[68%] rounded-full"
+                          style={{ background: t.ink, opacity: 0.9 }}
+                        />
+                        <span
+                          className="h-[4px] w-[44%] rounded-full"
+                          style={{ background: t.inkSoft, opacity: 0.85 }}
+                        />
+                      </span>
+                      {/* a chip */}
+                      <span
+                        className="absolute bottom-[9px] left-[11px] h-[8px] w-[18px] rounded-full"
+                        style={{ background: t.chipBg }}
                       />
                     </span>
                     <span className="flex items-center justify-center gap-1 text-[11px] text-cream-soft">
