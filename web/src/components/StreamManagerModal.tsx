@@ -246,15 +246,19 @@ export function StreamManagerModal({
                       >
                         沢
                       </span>
-                      {/* title + subtitle ink bars */}
-                      <span className="absolute left-[11px] right-[9px] top-[13px] flex flex-col gap-[5px]">
+                      {/* title + two description lines, echoing a real card */}
+                      <span className="absolute left-[11px] right-[9px] top-[11px] flex flex-col">
                         <span
-                          className="h-[6px] w-[68%] rounded-full"
+                          className="h-[6px] w-[70%] rounded-full"
                           style={{ background: t.ink, opacity: 0.9 }}
                         />
                         <span
-                          className="h-[4px] w-[44%] rounded-full"
-                          style={{ background: t.inkSoft, opacity: 0.85 }}
+                          className="mt-[7px] h-[3px] w-[60%] rounded-full"
+                          style={{ background: t.inkSoft, opacity: 0.8 }}
+                        />
+                        <span
+                          className="mt-[4px] h-[3px] w-[45%] rounded-full"
+                          style={{ background: t.inkSoft, opacity: 0.65 }}
                         />
                       </span>
                       {/* a chip */}
