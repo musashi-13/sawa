@@ -27,6 +27,16 @@ function toEpoch(value: string): number | undefined {
   return Number.isNaN(ms) ? undefined : ms;
 }
 
+/** Local `YYYY-MM-DDTHH:mm` for a timestamp — the format `datetime-local` wants
+ *  for its `min` attribute (so past times can't be picked). */
+function toLocalInput(ms: number): string {
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+    d.getHours(),
+  )}:${pad(d.getMinutes())}`;
+}
+
 export function AddTaskModal({ open, mode, onClose, onSave }: AddTaskModalProps) {
   const keyboardInset = useKeyboardInset();
   const [title, setTitle] = useState("");
@@ -37,6 +47,9 @@ export function AddTaskModal({ open, mode, onClose, onSave }: AddTaskModalProps)
   const [effort, setEffort] = useState<Effort | undefined>(undefined);
   const [important, setImportant] = useState(false);
   const [repeat, setRepeat] = useState(false);
+  const [deadlineError, setDeadlineError] = useState(false);
+  // Earliest selectable deadline — recomputed when the pane opens.
+  const [minDeadline, setMinDeadline] = useState("");
 
   // Reset each time the pane opens; honour how it was opened (task vs bundle).
   useEffect(() => {
@@ -49,6 +62,8 @@ export function AddTaskModal({ open, mode, onClose, onSave }: AddTaskModalProps)
       setEffort(undefined);
       setImportant(false);
       setRepeat(false);
+      setDeadlineError(false);
+      setMinDeadline(toLocalInput(Date.now()));
     }
   }, [open, mode]);
 
@@ -56,12 +71,18 @@ export function AddTaskModal({ open, mode, onClose, onSave }: AddTaskModalProps)
     if (!title.trim()) return;
     const childTitles = children.map((c) => c.trim()).filter(Boolean);
     if (bundle && childTitles.length === 0) return;
+    // A daily task has no fixed calendar deadline.
+    const deadlineMs = repeat ? undefined : toEpoch(deadline);
+    // Never create an already-failed task: a deadline must be in the future.
+    if (deadlineMs !== undefined && deadlineMs <= Date.now()) {
+      setDeadlineError(true);
+      return;
+    }
     onSave(
       {
         title,
         description,
-        // A daily task has no fixed calendar deadline.
-        deadline: repeat ? undefined : toEpoch(deadline),
+        deadline: deadlineMs,
         childTitles,
         effort,
         important,
@@ -176,13 +197,24 @@ export function AddTaskModal({ open, mode, onClose, onSave }: AddTaskModalProps)
                   Deadline (optional)
                   <input
                     type="datetime-local"
+                    // `min` blocks past times in the native picker, so a task
+                    // can't be created already-failed.
+                    min={minDeadline}
                     // iOS clips the value in date/time inputs unless the internal
                     // value box is given room + left-aligned; min-height + the
                     // ::-webkit-date-and-time-value tweaks fix the crop.
                     className={`${inputClass} mt-1.5 block min-h-[48px] appearance-none [&::-webkit-date-and-time-value]:m-0 [&::-webkit-date-and-time-value]:text-left`}
                     value={deadline}
-                    onChange={(e) => setDeadline(e.target.value)}
+                    onChange={(e) => {
+                      setDeadline(e.target.value);
+                      if (deadlineError) setDeadlineError(false);
+                    }}
                   />
+                  {deadlineError && (
+                    <span className="mt-1.5 block text-[12px] text-[#C0584A]">
+                      Pick a time in the future.
+                    </span>
+                  )}
                 </label>
               )}
 

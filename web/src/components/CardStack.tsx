@@ -69,8 +69,13 @@ export function CardStack({
   const postponeHint = useTransform(hintX, [-130, -30], [1, 0]);
   const completeScale = useTransform(hintX, [30, 130], [0.7, 1]);
   const postponeScale = useTransform(hintX, [-130, -30], [1, 0.7]);
-  // Exit direction for the leaving card (set the instant a swipe commits).
-  const exitDir = useMotionValue(1);
+  // The top card exits (flies off) ONLY when the user swipes it — never when the
+  // queue merely reorders and a different task becomes the top (that used to
+  // fling the demoted card across the screen: the "ghost card" bug). `flyOnExit`
+  // records the intent; the exit variant reads it, and it resets after each fly.
+  const flyOnExit = useRef(false);
+  const exitDir = useRef<1 | -1>(1);
+  const viewportW = typeof window !== "undefined" ? window.innerWidth : 600;
 
   // One-shot "cards added to the back" flourish when a bundle unfolds.
   const [scattering, setScattering] = useState(false);
@@ -96,9 +101,13 @@ export function CardStack({
   function commit(dir: 1 | -1) {
     if (!top) return;
     hintX.set(0);
-    exitDir.set(dir);
     // Unfolding a bundle scatters new cards into the stack — play the flourish.
     if (dir > 0 && !failed && top.isBundle) triggerScatter();
+    // Mark this top-card removal as a swipe, so its exit flies it off. The data
+    // change below drives the exit; a reorder never sets this flag, so a merely
+    // demoted top card exits instantly instead.
+    flyOnExit.current = true;
+    exitDir.current = dir;
     act(dir, top);
   }
 
@@ -132,6 +141,8 @@ export function CardStack({
       info.offset.x > SWIPE_THRESHOLD || info.velocity.x > VELOCITY_THRESHOLD;
     const goLeft =
       info.offset.x < -SWIPE_THRESHOLD || info.velocity.x < -VELOCITY_THRESHOLD;
+    // The dragged card IS the one that exits, so the fly-off continues seamlessly
+    // from the release position — no offset hand-off needed.
     if (goRight) commit(1);
     else if (goLeft) commit(-1);
   }
@@ -170,11 +181,21 @@ export function CardStack({
           })}
       </AnimatePresence>
 
-      <AnimatePresence custom={exitDir.get()} initial={false}>
+      {/* The interactive top card, rendered at rest (no entrance animation, so
+          it can't get stuck at an initial offset). It has NO exit either: when
+          the queue reorders and a different task becomes the top, the stack just
+          re-lays-out — the old top drops to a peek instead of being flung off. */}
+      <AnimatePresence
+        custom={{ fly: flyOnExit.current, dir: exitDir.current }}
+        initial={false}
+        onExitComplete={() => {
+          flyOnExit.current = false;
+        }}
+      >
         {top ? (
           <motion.div
             key={top.id}
-            custom={exitDir.get()}
+            custom={{ fly: flyOnExit.current, dir: exitDir.current }}
             className="no-select absolute inset-x-0 bottom-0 h-[185px] overflow-hidden rounded-[22px]"
             style={{
               zIndex: 50,
@@ -185,22 +206,21 @@ export function CardStack({
               touchAction: "pan-y",
               cursor: "grab",
             }}
-            initial={{ y: -STEP, scale: 1 - SCALE_STEP, opacity: 1 }}
-            animate={{ y: 0, scale: 1, opacity: 1 }}
             variants={{
-              exit: (dir: number) => ({
-                // Lift above the newly-promoted top card (z 50) so the flying
-                // card stays on top of the stack while it exits, instead of
-                // being painted behind it.
-                zIndex: 70,
-                x: dir * (typeof window !== "undefined" ? window.innerWidth : 600) * 1.15,
-                rotate: dir * 8,
-                opacity: 0,
-                transition: { duration: 0.3, ease: [0.32, 0, 0.67, 0] },
-              }),
+              exit: (c: { fly: boolean; dir: 1 | -1 }) =>
+                c.fly
+                  ? {
+                      // Swiped away: fly off-screen, lifted above the new top.
+                      zIndex: 70,
+                      x: c.dir * viewportW * 1.15,
+                      rotate: c.dir * 8,
+                      opacity: 0,
+                      transition: { duration: 0.3, ease: [0.32, 0, 0.67, 0] },
+                    }
+                  : // Merely reordered to a peek: vanish instantly, no fly-off.
+                    { opacity: 0, transition: { duration: 0 } },
             }}
             exit="exit"
-            transition={{ type: "spring", stiffness: 420, damping: 36 }}
             drag="x"
             dragSnapToOrigin
             dragElastic={0.55}
