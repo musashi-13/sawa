@@ -33,7 +33,7 @@ export function TopBar({
             {name ? `Hi, ${name}` : "Hi"}
           </span>
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-3.5">
           <div
             data-tour="streak"
             className="bg-bg-soft border-border-warm flex items-center gap-1.5 rounded-full border px-2.5 py-1"
@@ -46,9 +46,9 @@ export function TopBar({
             onClick={onManageStreams}
             aria-label="Manage streams"
             title="Manage streams"
-            className="text-muted transition-colors hover:text-cream-soft active:scale-90"
+            className="text-muted flex items-center transition-colors hover:text-cream-soft active:scale-90"
           >
-            <Settings2 size={16} />
+            <Settings2 size={18} />
           </button>
           {profileSlot}
         </div>

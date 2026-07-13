@@ -113,9 +113,14 @@ export function scoreTask(
   return score;
 }
 
-/** Active = still in play (not completed, not failed). */
+/** Active = a real, in-play card (not a recurrence template, not completed,
+ *  not failed). */
 function isActive(task: Task, from: number): boolean {
-  return task.completedAt === undefined && !isFailed(task, from);
+  return (
+    task.repeat === undefined &&
+    task.completedAt === undefined &&
+    !isFailed(task, from)
+  );
 }
 
 /**

@@ -68,6 +68,23 @@ export interface Task {
   order?: number;
 
   /**
+   * Recurrence marker on a *template* task. A template is never shown in the
+   * stack, counted, ranked, or logged — it just spawns a fresh instance each
+   * day (see `lib/recurrence.ts`). Only "daily" for now.
+   */
+  repeat?: "daily";
+
+  /** On an *instance*: the id of the recurring template it was spawned from. */
+  templateId?: ID;
+
+  /**
+   * On an instance: the day (local `YYYY-MM-DD`) it belongs to. Used to dedupe
+   * generation (one instance per template per day) and to retire stale,
+   * uncompleted instances when a new day's copy is created.
+   */
+  instanceDay?: string;
+
+  /**
    * Soft signal used by the ranking algorithm. Each postpone increments this,
    * pushing the card toward the back of the stack without imposing a hard
    * order between tasks.
@@ -93,5 +110,8 @@ export interface SawaData {
    * persistence + future sync path as the rest of the data.
    */
   userName?: string;
+  /** Id of the selected card theme (see `lib/cardThemes.ts`). Global for now;
+   *  per-stream themes can layer on later. */
+  cardTheme?: string;
   version: number;
 }

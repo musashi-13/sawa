@@ -5,9 +5,10 @@ import {
   motion,
   useDragControls,
 } from "motion/react";
-import { Check, Compass, GripVertical, Plus, Trash2, X } from "lucide-react";
-import type { TaskStream } from "../types";
+import { Check, Compass, GripVertical, Plus, Repeat, Trash2, X } from "lucide-react";
+import type { Task, TaskStream } from "../types";
 import { useKeyboardInset } from "../hooks/useKeyboardInset";
+import { CARD_THEMES, DEFAULT_CARD_THEME_ID } from "../lib/cardThemes";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Settings sheet: edit the user's name, plus manage streams (rename, reorder by
@@ -38,6 +39,12 @@ interface StreamManagerModalProps {
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
   onReorder: (orderedIds: string[]) => void;
+  /** Recurring templates, to view and stop. */
+  templates: Task[];
+  onStopRepeat: (id: string) => void;
+  /** Selected card theme id + setter. */
+  cardThemeId?: string;
+  onSelectTheme: (id: string) => void;
   /** Replay the first-run walkthrough. */
   onReplayTour: () => void;
 }
@@ -53,8 +60,13 @@ export function StreamManagerModal({
   onRename,
   onDelete,
   onReorder,
+  templates,
+  onStopRepeat,
+  cardThemeId,
+  onSelectTheme,
   onReplayTour,
 }: StreamManagerModalProps) {
+  const selectedTheme = cardThemeId ?? DEFAULT_CARD_THEME_ID;
   const keyboardInset = useKeyboardInset();
   const [rows, setRows] = useState<Row[]>([]);
   const [nameDraft, setNameDraft] = useState("");
@@ -194,6 +206,104 @@ export function StreamManagerModal({
             >
               <Plus size={16} /> New stream
             </button>
+
+            {/* Card themes */}
+            <div className="border-border-warm my-5 border-t" />
+            <label className="text-muted-soft mb-1.5 block text-[11px] font-medium uppercase tracking-[1px]">
+              Card theme
+            </label>
+            <p className="text-muted-soft mb-3 text-[12px] leading-[1.5]">
+              The paper your task cards are printed on.
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {CARD_THEMES.map((t) => {
+                const on = selectedTheme === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => onSelectTheme(t.id)}
+                    aria-pressed={on}
+                    className="flex flex-col items-stretch gap-1.5 rounded-xl p-1 transition-transform active:scale-[0.97]"
+                    style={{
+                      background: on ? "#2c2a22" : "transparent",
+                      outline: on ? "1.5px solid #C96442" : "1.5px solid transparent",
+                    }}
+                  >
+                    {/* A simplified mock of a real card, so the ink/paper contrast
+                        of each theme is visible at a glance. */}
+                    <span
+                      className="relative block h-[54px] w-full overflow-hidden rounded-lg"
+                      style={{ background: t.bg, border: `1px solid ${t.border}` }}
+                    >
+                      <span
+                        className="absolute bottom-0 left-0 top-0 w-[3px]"
+                        style={{ background: "#C96442" }}
+                      />
+                      {/* 沢 watermark */}
+                      <span
+                        className="absolute -bottom-2 right-0 select-none font-serif leading-none"
+                        style={{ fontSize: 34, color: t.watermark }}
+                      >
+                        沢
+                      </span>
+                      {/* title + subtitle ink bars */}
+                      <span className="absolute left-[11px] right-[9px] top-[13px] flex flex-col gap-[5px]">
+                        <span
+                          className="h-[6px] w-[68%] rounded-full"
+                          style={{ background: t.ink, opacity: 0.9 }}
+                        />
+                        <span
+                          className="h-[4px] w-[44%] rounded-full"
+                          style={{ background: t.inkSoft, opacity: 0.85 }}
+                        />
+                      </span>
+                      {/* a chip */}
+                      <span
+                        className="absolute bottom-[9px] left-[11px] h-[8px] w-[18px] rounded-full"
+                        style={{ background: t.chipBg }}
+                      />
+                    </span>
+                    <span className="flex items-center justify-center gap-1 text-[11px] text-cream-soft">
+                      {on && <Check size={11} className="text-clay" />}
+                      {t.name}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Repeating tasks */}
+            {templates.length > 0 && (
+              <>
+                <div className="border-border-warm my-5 border-t" />
+                <label className="text-muted-soft mb-1.5 block text-[11px] font-medium uppercase tracking-[1px]">
+                  Repeating
+                </label>
+                <p className="text-muted-soft mb-3 text-[12px] leading-[1.5]">
+                  These reappear as a fresh card every day. Stop one to end its
+                  daily repeat.
+                </p>
+                <div className="space-y-2">
+                  {templates.map((t) => (
+                    <div
+                      key={t.id}
+                      className="border-border-warm bg-bg flex items-center gap-2 rounded-xl border px-3 py-2"
+                    >
+                      <Repeat size={15} className="text-gold shrink-0" />
+                      <span className="text-cream-soft min-w-0 flex-1 truncate text-[14px]">
+                        {t.title}
+                      </span>
+                      <button
+                        onClick={() => onStopRepeat(t.id)}
+                        className="text-muted shrink-0 rounded-full px-2 py-1 text-[12px] transition-colors hover:text-[#C0584A]"
+                      >
+                        Stop
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
 
             {/* Divider + walkthrough replay */}
             <div className="border-border-warm my-5 border-t" />
