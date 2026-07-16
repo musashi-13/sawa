@@ -30,6 +30,21 @@ export interface Store {
 // Bumped v2 → v3 on the "context" → "stream" rename to reset any old-shape data.
 // ConvexStore reuses this key as its offline cache so switching stores is seamless.
 const KEY = "sawa.data.v3";
+// "1" while a user is signed in. Persisted (not just in-memory) so a sign-out
+// that reloads the page is still recognised on the next load.
+const SESSION_KEY = "sawa.session";
+
+function readSession(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.localStorage.getItem(SESSION_KEY) === "1"
+  );
+}
+function setSession(active: boolean): void {
+  if (typeof window === "undefined") return;
+  if (active) window.localStorage.setItem(SESSION_KEY, "1");
+  else window.localStorage.removeItem(SESSION_KEY);
+}
 
 function readCache(): SawaData | null {
   if (typeof window === "undefined") return null;
@@ -137,10 +152,25 @@ export class ConvexStore implements Store {
   /** Bridge the auth token in from Clerk (or clear it on sign-out). */
   setAuth(getToken: TokenFetcher | null): void {
     if (!getToken) {
+      // A real sign-out is "was signed in (session marker set) → now not". Reset
+      // the local cache to a clean default: the account's data lives safely on
+      // the server, we just stop showing it on this device. A plain guest load
+      // (no prior session) leaves local data untouched. This runs on the load
+      // after sign-out too, so the reset survives Clerk's post-sign-out reload.
+      const signedOut = readSession();
       this.authed = false;
+      this.seeded = false;
       this.client.setAuth(async () => null);
+      if (signedOut) {
+        setSession(false);
+        const fresh = seedData();
+        this.cache = fresh;
+        writeCache(fresh);
+        this.listeners.forEach((fn) => fn(fresh));
+      }
       return;
     }
+    setSession(true);
     this.authed = true;
     this.seeded = false; // allow seeding the (possibly brand-new) account
     this.client.setAuth(getToken);
