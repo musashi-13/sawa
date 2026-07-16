@@ -46,6 +46,21 @@ function setSession(active: boolean): void {
   else window.localStorage.removeItem(SESSION_KEY);
 }
 
+const DEFAULT_STREAM_NAMES = ["Daily", "Projects", "Errands"];
+
+/** Does this blob hold anything worth migrating up to a fresh account? Guards
+ *  the seed path so an empty / just-reset cache never claims (and clobbers) an
+ *  account — a bare seed (3 default streams, no tasks/name) counts as empty. */
+function hasContent(d: SawaData): boolean {
+  return (
+    d.tasks.length > 0 ||
+    d.completionDays.length > 0 ||
+    !!d.userName ||
+    d.streams.length !== 3 ||
+    d.streams.some((s) => !DEFAULT_STREAM_NAMES.includes(s.name))
+  );
+}
+
 function readCache(): SawaData | null {
   if (typeof window === "undefined") return null;
   const raw = window.localStorage.getItem(KEY);
@@ -131,9 +146,13 @@ export class ConvexStore implements Store {
 
     this.client.onUpdate(api.data.get, {}, (server) => {
       if (server == null) {
-        // No server data yet. Once authenticated, seed the account once from the
-        // local cache (this migrates any pre-sign-in data on first login).
-        if (this.authed && !this.seeded) {
+        // No server data yet. Migrate the local cache up to seed the account —
+        // but ONLY if it actually holds something. An empty/just-reset cache must
+        // never seed the server: otherwise a signed-out-then-in device (or a
+        // second empty device) could overwrite real data that another device is
+        // about to sync. When the cache is empty we leave the account untouched;
+        // the first real write (`save`) creates it.
+        if (this.authed && !this.seeded && hasContent(this.cache)) {
           this.seeded = true;
           void this.client.mutation(api.data.save, { data: this.cache }).catch(
             () => {},
