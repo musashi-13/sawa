@@ -251,6 +251,8 @@ export default function App({
         onStopRepeat={actions.remove}
         cardThemeId={cardTheme}
         onSelectTheme={actions.setCardTheme}
+        data={data}
+        onImport={actions.importData}
         onReplayTour={() => setTour(true)}
       />
       <KeyboardHelp open={help} onClose={() => setHelp(false)} />
