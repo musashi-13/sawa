@@ -5,10 +5,21 @@ import {
   motion,
   useDragControls,
 } from "motion/react";
-import { Check, Compass, GripVertical, Plus, Repeat, Trash2, X } from "lucide-react";
-import type { Task, TaskStream } from "../types";
+import {
+  Check,
+  Compass,
+  Download,
+  GripVertical,
+  Plus,
+  Repeat,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
+import type { SawaData, Task, TaskStream } from "../types";
 import { useKeyboardInset } from "../hooks/useKeyboardInset";
 import { CARD_THEMES, DEFAULT_CARD_THEME_ID } from "../lib/cardThemes";
+import { downloadBackup, parseBackup } from "../lib/backup";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Settings sheet: edit the user's name, plus manage streams (rename, reorder by
@@ -45,6 +56,10 @@ interface StreamManagerModalProps {
   /** Selected card theme id + setter. */
   cardThemeId?: string;
   onSelectTheme: (id: string) => void;
+  /** Whole dataset, for exporting a backup file. */
+  data: SawaData;
+  /** Restore a parsed backup, replacing all current data. */
+  onImport: (data: SawaData) => void;
   /** Replay the first-run walkthrough. */
   onReplayTour: () => void;
 }
@@ -64,6 +79,8 @@ export function StreamManagerModal({
   onStopRepeat,
   cardThemeId,
   onSelectTheme,
+  data,
+  onImport,
   onReplayTour,
 }: StreamManagerModalProps) {
   const selectedTheme = cardThemeId ?? DEFAULT_CARD_THEME_ID;
@@ -72,6 +89,12 @@ export function StreamManagerModal({
   const [nameDraft, setNameDraft] = useState("");
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const focusId = useRef<string | null>(null);
+  // Backup import: a hidden file input, plus a transient status line.
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [backupNote, setBackupNote] = useState<{
+    kind: "ok" | "error";
+    text: string;
+  } | null>(null);
 
   // Seed only when the sheet opens — not on every prop change — so our own
   // in-session edits aren't clobbered by the store echoing them back.
@@ -80,6 +103,7 @@ export function StreamManagerModal({
       setRows(streams.map((s) => ({ id: s.id, name: s.name })));
       setNameDraft(userName);
       setConfirmId(null);
+      setBackupNote(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -113,6 +137,32 @@ export function StreamManagerModal({
     const id = onAdd("New stream");
     focusId.current = id;
     setRows((prev) => [...prev, { id, name: "New stream" }]);
+  }
+
+  function handleExport() {
+    downloadBackup(data);
+    setBackupNote({ kind: "ok", text: "Backup downloaded." });
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file) return;
+    try {
+      const restored = parseBackup(await file.text());
+      onImport(restored);
+      setBackupNote({
+        kind: "ok",
+        text: `Restored ${restored.tasks.length} task${
+          restored.tasks.length === 1 ? "" : "s"
+        }.`,
+      });
+    } catch (err) {
+      setBackupNote({
+        kind: "error",
+        text: err instanceof Error ? err.message : "Couldn't read that file.",
+      });
+    }
   }
 
   return (
@@ -307,6 +357,45 @@ export function StreamManagerModal({
                   ))}
                 </div>
               </>
+            )}
+
+            {/* Backup: export / import the whole dataset as a JSON file */}
+            <div className="border-border-warm my-5 border-t" />
+            <label className="text-muted-soft mb-1.5 block text-[11px] font-medium uppercase tracking-[1px]">
+              Backup
+            </label>
+            <p className="text-muted-soft mb-3 text-[12px] leading-[1.5]">
+              Save all your tasks and streams to a file, or restore from one.
+              Importing replaces everything currently here.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={handleExport}
+                className="border-border-warm text-cream-soft hover:border-clay/60 flex flex-1 items-center justify-center gap-2 rounded-xl border py-2.5 text-[13px] transition-colors"
+              >
+                <Download size={15} /> Export
+              </button>
+              <button
+                onClick={() => fileRef.current?.click()}
+                className="border-border-warm text-cream-soft hover:border-clay/60 flex flex-1 items-center justify-center gap-2 rounded-xl border py-2.5 text-[13px] transition-colors"
+              >
+                <Upload size={15} /> Import
+              </button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={handleImportFile}
+              />
+            </div>
+            {backupNote && (
+              <p
+                className="mt-2 text-[12px]"
+                style={{ color: backupNote.kind === "ok" ? "#8FA37A" : "#C0584A" }}
+              >
+                {backupNote.text}
+              </p>
             )}
 
             {/* Divider + walkthrough replay */}

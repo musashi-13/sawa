@@ -232,6 +232,13 @@ export function useSawa() {
     [mutate],
   );
 
+  /** Replace the whole dataset from an imported backup file. Goes through the
+   *  normal persist path, so the queue snapshot is rebuilt and the change syncs. */
+  const importData = useCallback(
+    (next: SawaData) => mutate(() => next),
+    [mutate],
+  );
+
   const addTask = useCallback(
     (streamId: string, input: NewTaskInput, isBundle = false) =>
       mutate((d) => {
@@ -459,6 +466,7 @@ export function useSawa() {
       reorderStreams,
       setUserName,
       setCardTheme,
+      importData,
       undo,
       dismissUndo,
     },
