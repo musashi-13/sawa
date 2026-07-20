@@ -20,6 +20,7 @@ import type { SawaData, Task, TaskStream } from "../types";
 import { useKeyboardInset } from "../hooks/useKeyboardInset";
 import { CARD_THEMES, DEFAULT_CARD_THEME_ID } from "../lib/cardThemes";
 import { downloadBackup, parseBackup } from "../lib/backup";
+import { APP_VERSION } from "../version";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Settings sheet: edit the user's name, plus manage streams (rename, reorder by
@@ -462,7 +463,9 @@ export function StreamManagerModal({
               <span className="flex items-center gap-2">
                 <Compass size={16} /> Show walkthrough
               </span>
-              <span className="text-muted-soft text-[11px]">Replay the intro tour</span>
+              <span className="text-muted-soft text-[11px] tabular-nums">
+                v{APP_VERSION}
+              </span>
             </button>
           </motion.div>
         </motion.div>
