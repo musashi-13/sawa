@@ -139,12 +139,20 @@ export class ConvexStore implements Store {
   private listeners = new Set<(data: SawaData) => void>();
   private authed = false;
   private seeded = false;
+  // Flips true on the first server snapshot after auth is wired. Until then we
+  // must NOT push local writes: a save issued in the gap between sign-in and the
+  // account loading (e.g. auto-filling the display name while the cache is still
+  // the post-sign-out empty seed) would overwrite real server data before it
+  // arrives — the sign-out/sign-in data-wipe. Gating pushes on this closes it.
+  private hydrated = false;
 
   constructor(url: string) {
     this.client = new ConvexClient(url);
     this.cache = readCache() ?? seedData();
 
     this.client.onUpdate(api.data.get, {}, (server) => {
+      // We've now heard from the server for this auth session — writes are safe.
+      this.hydrated = true;
       if (server == null) {
         // No server data yet. Migrate the local cache up to seed the account —
         // but ONLY if it actually holds something. An empty/just-reset cache must
@@ -179,6 +187,7 @@ export class ConvexStore implements Store {
       const signedOut = readSession();
       this.authed = false;
       this.seeded = false;
+      this.hydrated = false;
       this.client.setAuth(async () => null);
       if (signedOut) {
         setSession(false);
@@ -192,6 +201,7 @@ export class ConvexStore implements Store {
     setSession(true);
     this.authed = true;
     this.seeded = false; // allow seeding the (possibly brand-new) account
+    this.hydrated = false; // block writes until this account's data has loaded
     this.client.setAuth(getToken);
   }
 
@@ -202,6 +212,12 @@ export class ConvexStore implements Store {
   save(data: SawaData): void {
     this.cache = data;
     writeCache(data);
+    // Don't push until this account's data has loaded at least once (see
+    // `hydrated`): a write in the sign-in → load gap would clobber the server
+    // with the just-reset empty cache. The write still lands in the local cache;
+    // once the account loads, the server snapshot wins (restore), or — for a
+    // brand-new/empty account — the onUpdate seed branch flushes the cache up.
+    if (!this.authed || !this.hydrated) return;
     // Offline: the cache holds and Convex retries the mutation on reconnect.
     void this.client.mutation(api.data.save, { data }).catch(() => {});
   }
