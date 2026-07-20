@@ -150,6 +150,17 @@ export function StreamManagerModal({
   function applyImport(restored: SawaData) {
     onImport(restored);
     setPendingImport(null);
+    // Stream rows + name are local state seeded only when the sheet opens, so an
+    // import (which replaces the whole dataset while the sheet is already open)
+    // wouldn't otherwise show up here until a close/reopen. Refresh them from the
+    // restored data directly.
+    setRows(
+      [...restored.streams]
+        .sort((a, b) => a.order - b.order)
+        .map((s) => ({ id: s.id, name: s.name })),
+    );
+    setNameDraft(restored.userName ?? "");
+    setConfirmId(null);
     setBackupNote({
       kind: "ok",
       text: `Restored ${restored.tasks.length} task${
