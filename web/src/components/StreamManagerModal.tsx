@@ -95,6 +95,8 @@ export function StreamManagerModal({
     kind: "ok" | "error";
     text: string;
   } | null>(null);
+  // A validated import awaiting confirmation, when it would replace real data.
+  const [pendingImport, setPendingImport] = useState<SawaData | null>(null);
 
   // Seed only when the sheet opens — not on every prop change — so our own
   // in-session edits aren't clobbered by the store echoing them back.
@@ -104,6 +106,7 @@ export function StreamManagerModal({
       setNameDraft(userName);
       setConfirmId(null);
       setBackupNote(null);
+      setPendingImport(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -144,20 +147,32 @@ export function StreamManagerModal({
     setBackupNote({ kind: "ok", text: "Backup downloaded." });
   }
 
+  function applyImport(restored: SawaData) {
+    onImport(restored);
+    setPendingImport(null);
+    setBackupNote({
+      kind: "ok",
+      text: `Restored ${restored.tasks.length} task${
+        restored.tasks.length === 1 ? "" : "s"
+      }.`,
+    });
+  }
+
   async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-selecting the same file later
     if (!file) return;
+    setBackupNote(null);
     try {
       const restored = parseBackup(await file.text());
-      onImport(restored);
-      setBackupNote({
-        kind: "ok",
-        text: `Restored ${restored.tasks.length} task${
-          restored.tasks.length === 1 ? "" : "s"
-        }.`,
-      });
+      // Importing replaces everything. Only skip the confirm when there's
+      // nothing to lose (a fresh/empty account); otherwise ask first, since
+      // there's no undo for an import.
+      const hasData = data.tasks.length > 0 || data.completionDays.length > 0;
+      if (hasData) setPendingImport(restored);
+      else applyImport(restored);
     } catch (err) {
+      setPendingImport(null);
       setBackupNote({
         kind: "error",
         text: err instanceof Error ? err.message : "Couldn't read that file.",
@@ -389,6 +404,32 @@ export function StreamManagerModal({
                 onChange={handleImportFile}
               />
             </div>
+            {pendingImport && (
+              <div className="mt-2 rounded-xl border border-[#5A2C24] bg-[#2a201d] p-3">
+                <p className="text-cream-soft text-[12px] leading-[1.5]">
+                  Replace everything here with{" "}
+                  <span className="font-medium">
+                    {pendingImport.tasks.length} task
+                    {pendingImport.tasks.length === 1 ? "" : "s"}
+                  </span>{" "}
+                  from this file? This can't be undone.
+                </p>
+                <div className="mt-2.5 flex gap-2">
+                  <button
+                    onClick={() => applyImport(pendingImport)}
+                    className="flex-1 rounded-lg bg-[#5A2C24] py-2 text-[13px] font-medium text-[#E9C7C0] transition-transform active:scale-[0.98]"
+                  >
+                    Replace
+                  </button>
+                  <button
+                    onClick={() => setPendingImport(null)}
+                    className="border-border-warm text-muted flex-1 rounded-lg border py-2 text-[13px] transition-colors hover:text-cream-soft"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
             {backupNote && (
               <p
                 className="mt-2 text-[12px]"
