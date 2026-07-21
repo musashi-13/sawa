@@ -7,4 +7,4 @@
 //
 // Bump this on every push to main so the number in Settings reflects exactly
 // what's deployed — a live "is my change actually running?" check.
-export const APP_VERSION = "0.2.14";
+export const APP_VERSION = "0.2.15";
