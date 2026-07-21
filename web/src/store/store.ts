@@ -25,6 +25,8 @@ export interface Store {
   subscribe(fn: (data: SawaData) => void): () => void;
   /** Wire (or clear, with null) the auth token source. No-op for local storage. */
   setAuth?(getToken: TokenFetcher | null): void;
+  /** Clear local state immediately on sign-out click, before the page reloads. */
+  signOutReset?(): void;
 }
 
 // Bumped v2 → v3 on the "context" → "stream" rename to reset any old-shape data.
@@ -176,14 +178,40 @@ export class ConvexStore implements Store {
     });
   }
 
+  /** Wipe local state back to a clean default and push it to the UI + cache.
+   *  The account's data lives safely on the server; we just stop showing it. */
+  private resetToDefault(): void {
+    const fresh = seedData();
+    this.cache = fresh;
+    writeCache(fresh);
+    this.listeners.forEach((fn) => fn(fresh));
+  }
+
+  /**
+   * Called synchronously the instant the user clicks "Sign out", before Clerk
+   * tears down the session and reloads the page. Clearing the cache (and Convex
+   * auth) here means the reload reads the already-cleared state, so the
+   * signed-in cards/streams don't render for a frame and then vanish — the
+   * sign-out flash. `setAuth(null)` still runs afterwards as a safety net for
+   * sign-outs that don't originate from the button (e.g. session expiry).
+   */
+  signOutReset(): void {
+    setSession(false);
+    this.authed = false;
+    this.seeded = false;
+    this.hydrated = false;
+    this.client.setAuth(async () => null);
+    this.resetToDefault();
+  }
+
   /** Bridge the auth token in from Clerk (or clear it on sign-out). */
   setAuth(getToken: TokenFetcher | null): void {
     if (!getToken) {
       // A real sign-out is "was signed in (session marker set) → now not". Reset
-      // the local cache to a clean default: the account's data lives safely on
-      // the server, we just stop showing it on this device. A plain guest load
-      // (no prior session) leaves local data untouched. This runs on the load
-      // after sign-out too, so the reset survives Clerk's post-sign-out reload.
+      // the local cache to a clean default. A plain guest load (no prior session)
+      // leaves local data untouched. This also runs on the load after sign-out,
+      // so the reset survives Clerk's post-sign-out reload even if the eager
+      // signOutReset (on the button) didn't run.
       const signedOut = readSession();
       this.authed = false;
       this.seeded = false;
@@ -191,10 +219,7 @@ export class ConvexStore implements Store {
       this.client.setAuth(async () => null);
       if (signedOut) {
         setSession(false);
-        const fresh = seedData();
-        this.cache = fresh;
-        writeCache(fresh);
-        this.listeners.forEach((fn) => fn(fresh));
+        this.resetToDefault();
       }
       return;
     }

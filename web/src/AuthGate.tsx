@@ -132,6 +132,9 @@ function ProfileControl({
               <button
                 onClick={() => {
                   setOpen(false);
+                  // Clear local state *before* Clerk tears down / reloads, so
+                  // the signed-in cards don't flash on the way out.
+                  store.signOutReset?.();
                   void signOut();
                 }}
                 className={item}
