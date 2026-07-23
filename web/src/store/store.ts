@@ -157,6 +157,11 @@ export class ConvexStore implements Store {
   private authed = false;
   private seeded = false;
   private hydrateTimer: ReturnType<typeof setTimeout> | null = null;
+  // Revision this device last saw from the server. Sent with every write so the
+  // backend can refuse one built on stale state (see convex/data.ts).
+  private rev = 0;
+  // True when talking to a backend that predates `getState`/`baseRev`.
+  private legacy = false;
   // Flips true on the first server snapshot after auth is wired. Until then we
   // must NOT push local writes: a save issued in the gap between sign-in and the
   // account loading (e.g. auto-filling the display name while the cache is still
@@ -168,9 +173,58 @@ export class ConvexStore implements Store {
     this.client = new ConvexClient(url);
     this.cache = readCache() ?? seedData();
 
+    // The backend deploys separately from this bundle, so we might be talking to
+    // a deployment that predates `getState`/`baseRev`. Probe once (it answers
+    // fine unauthenticated) and fall back to the legacy read + legacy write args
+    // rather than breaking sync outright. Rendering is unaffected: `load()`
+    // already served the local cache synchronously.
+    void this.client
+      .query(api.data.getState, {})
+      .then(() => this.subscribeModern())
+      .catch((err) => {
+        this.legacy = true;
+        console.warn("[sawa] backend predates getState; using legacy sync", err);
+        devLog("backend predates getState — legacy sync mode", err);
+        this.subscribeLegacy();
+      });
+  }
+
+  /** Current protocol: server-confirmed auth + revisions. */
+  private subscribeModern(): void {
+    devLog("sync protocol: getState (auth-aware, revisioned)");
+    this.client.onUpdate(api.data.getState, {}, (state) => {
+      const s = state as {
+        authed: boolean;
+        data: SawaData | null;
+        rev: number;
+      };
+      // Trust the SERVER's view of identity, not Clerk's. A token the backend
+      // rejects used to arrive as a bare `null` — indistinguishable from an
+      // empty account, which is how a client could seed over real data. Don't
+      // hydrate on it either: the write gate's safety valve will release writes,
+      // and those will fail loudly instead of silently clobbering.
+      if (!s.authed) {
+        devLog("server: token NOT accepted (unauthenticated read)");
+        return;
+      }
+      this.applyServer(s.data, s.rev);
+    });
+  }
+
+  /** Older backend: `get` returns the bare blob and can't report auth state, so
+   *  fall back to this client's own view of it (pre-getState behaviour). */
+  private subscribeLegacy(): void {
     this.client.onUpdate(api.data.get, {}, (server) => {
+      if (!this.authed) return;
+      this.applyServer((server ?? null) as SawaData | null, this.rev);
+    });
+  }
+
+  private applyServer(server: SawaData | null, rev: number): void {
+    {
       // We've now heard from the server for this auth session — writes are safe.
       this.markHydrated();
+      this.rev = rev;
       if (server == null) {
         // No server data yet. Migrate the local cache up to seed the account —
         // but ONLY if it actually holds something. An empty/just-reset cache must
@@ -179,24 +233,34 @@ export class ConvexStore implements Store {
         // about to sync. When the cache is empty we leave the account untouched;
         // the first real write (`save`) creates it.
         devLog("server: no document for this account", {
-          willSeed: this.authed && !this.seeded && hasContent(this.cache),
+          willSeed: !this.seeded && hasContent(this.cache),
         });
-        if (this.authed && !this.seeded && hasContent(this.cache)) {
+        if (!this.seeded && hasContent(this.cache)) {
           this.seeded = true;
           devLog("seeding account from local cache", summarize(this.cache));
           void this.client
-            .mutation(api.data.save, { data: this.cache })
+            .mutation(api.data.save, this.writeArgs(this.cache))
             .catch((err) => devLog("seed failed", err));
         }
         return;
       }
       this.seeded = true;
-      const data = server as SawaData;
-      devLog("server snapshot received (overwrites local)", summarize(data));
+      const data = server;
+      devLog("server snapshot received (overwrites local)", {
+        ...summarize(data),
+        rev,
+      });
       this.cache = data;
       writeCache(data);
       this.listeners.forEach((fn) => fn(data));
-    });
+    }
+  }
+
+  /** Write args for the backend we're actually talking to. An older deployment's
+   *  `save` validator has no `baseRev`, and Convex rejects unknown arguments —
+   *  which would fail every write. */
+  private writeArgs(data: SawaData): { data: SawaData; baseRev?: number } {
+    return this.legacy ? { data } : { data, baseRev: this.rev };
   }
 
   /** Start the write gate for a genuine sign-in, with a safety valve. The
@@ -207,6 +271,7 @@ export class ConvexStore implements Store {
    *  race the gate exists to prevent. */
   private beginHydration(): void {
     this.hydrated = false;
+    this.rev = 0; // a different account's revisions mean nothing here
     devLog("hydration: waiting for this account's data (writes held)");
     if (this.hydrateTimer !== null) clearTimeout(this.hydrateTimer);
     this.hydrateTimer = setTimeout(() => {
@@ -230,6 +295,7 @@ export class ConvexStore implements Store {
   /** Sign-out: close the gate and drop any pending safety valve. */
   private cancelHydration(): void {
     this.hydrated = false;
+    this.rev = 0;
     if (this.hydrateTimer !== null) {
       clearTimeout(this.hydrateTimer);
       this.hydrateTimer = null;
@@ -310,6 +376,8 @@ export class ConvexStore implements Store {
       writesFlowing: this.authed && this.hydrated,
       seeded: this.seeded,
       hydrationPending: this.hydrateTimer !== null,
+      rev: this.rev,
+      protocol: this.legacy ? "legacy get (no revisions)" : "getState",
       cache: summarize(this.cache),
     };
   }
@@ -318,10 +386,13 @@ export class ConvexStore implements Store {
    *  bypassing the hydration gate. Returns a promise so it can be awaited. */
   forcePush(): Promise<unknown> {
     devLog("forcePush → server", summarize(this.cache));
+    // No baseRev on purpose: "force" means win the revision check too.
     return this.client
       .mutation(api.data.save, { data: this.cache })
       .then((r) => {
-        devLog("forcePush ok");
+        const rev = (r as { rev?: number } | null)?.rev;
+        if (typeof rev === "number") this.rev = rev;
+        devLog("forcePush ok", { rev: this.rev });
         return r;
       })
       .catch((err) => {
@@ -353,11 +424,27 @@ export class ConvexStore implements Store {
       }
       return;
     }
-    devLog("push → server", summarize(data));
+    devLog("push → server", {
+      ...summarize(data),
+      baseRev: this.legacy ? "n/a (legacy backend)" : this.rev,
+    });
     // Offline: the cache holds and Convex retries the mutation on reconnect.
     void this.client
-      .mutation(api.data.save, { data })
-      .then(() => devLog("push ok"))
+      .mutation(api.data.save, this.writeArgs(data))
+      .then((res) => {
+        const r = res as { conflict?: boolean; rev?: number } | null;
+        // Adopt the server's revision either way — on a conflict this lets the
+        // NEXT edit through instead of wedging every future write.
+        if (typeof r?.rev === "number") this.rev = r.rev;
+        if (r?.conflict) {
+          console.warn(
+            "[sawa] write rejected: server has newer data; keeping the server's version",
+          );
+          devLog("push CONFLICT — local write dropped", { serverRev: r.rev });
+        } else {
+          devLog("push ok", { rev: this.rev });
+        }
+      })
       .catch((err) => {
         console.warn("[sawa] sync failed", err);
         devLog("push FAILED", err);
