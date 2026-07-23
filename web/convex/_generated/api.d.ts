@@ -9,6 +9,7 @@
  */
 
 import type * as data from "../data.js";
+import type * as validate from "../validate.js";
 
 import type {
   ApiFromModules,
@@ -18,6 +19,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   data: typeof data;
+  validate: typeof validate;
 }>;
 
 /**
