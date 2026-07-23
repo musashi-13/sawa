@@ -22,18 +22,26 @@ export function AuthGate() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const autoShown = useRef(false);
 
+  // Keep the latest getToken in a ref so the effect below doesn't depend on its
+  // identity. Clerk hands back a new function as the token refreshes, and
+  // re-running setAuth for the *same* session used to re-close the store's write
+  // gate — silently holding every later write until the next server snapshot.
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+
   // Bridge the Clerk token into the store so Convex requests are authenticated.
+  // Depends only on the actual sign-in state, so it fires once per transition.
   useEffect(() => {
     const setAuth = store.setAuth?.bind(store);
     if (!isLoaded || !setAuth) return;
     if (isSignedIn) {
       setAuth(({ forceRefreshToken }) =>
-        getToken({ template: "convex", skipCache: forceRefreshToken }),
+        getTokenRef.current({ template: "convex", skipCache: forceRefreshToken }),
       );
     } else {
       setAuth(null);
     }
-  }, [isLoaded, isSignedIn, getToken]);
+  }, [isLoaded, isSignedIn]);
 
   // Open the sheet once, on first use, for signed-out visitors.
   useEffect(() => {
