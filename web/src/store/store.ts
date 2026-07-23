@@ -141,6 +141,7 @@ export class ConvexStore implements Store {
   private listeners = new Set<(data: SawaData) => void>();
   private authed = false;
   private seeded = false;
+  private hydrateTimer: ReturnType<typeof setTimeout> | null = null;
   // Flips true on the first server snapshot after auth is wired. Until then we
   // must NOT push local writes: a save issued in the gap between sign-in and the
   // account loading (e.g. auto-filling the display name while the cache is still
@@ -154,7 +155,7 @@ export class ConvexStore implements Store {
 
     this.client.onUpdate(api.data.get, {}, (server) => {
       // We've now heard from the server for this auth session — writes are safe.
-      this.hydrated = true;
+      this.markHydrated();
       if (server == null) {
         // No server data yet. Migrate the local cache up to seed the account —
         // but ONLY if it actually holds something. An empty/just-reset cache must
@@ -178,6 +179,39 @@ export class ConvexStore implements Store {
     });
   }
 
+  /** Start the write gate for a genuine sign-in, with a safety valve. The
+   *  subscription only re-fires when the query *result* changes, so an account
+   *  whose state doesn't change (e.g. a brand-new, still-empty one) could leave
+   *  us waiting forever — and a blocked write is a silently lost edit. Never
+   *  gate longer than this: losing the user's work is far worse than the narrow
+   *  race the gate exists to prevent. */
+  private beginHydration(): void {
+    this.hydrated = false;
+    if (this.hydrateTimer !== null) clearTimeout(this.hydrateTimer);
+    this.hydrateTimer = setTimeout(() => {
+      this.hydrated = true;
+      this.hydrateTimer = null;
+    }, 8000);
+  }
+
+  /** The account's data has arrived — writes may flow. */
+  private markHydrated(): void {
+    this.hydrated = true;
+    if (this.hydrateTimer !== null) {
+      clearTimeout(this.hydrateTimer);
+      this.hydrateTimer = null;
+    }
+  }
+
+  /** Sign-out: close the gate and drop any pending safety valve. */
+  private cancelHydration(): void {
+    this.hydrated = false;
+    if (this.hydrateTimer !== null) {
+      clearTimeout(this.hydrateTimer);
+      this.hydrateTimer = null;
+    }
+  }
+
   /** Wipe local state back to a clean default and push it to the UI + cache.
    *  The account's data lives safely on the server; we just stop showing it. */
   private resetToDefault(): void {
@@ -199,7 +233,7 @@ export class ConvexStore implements Store {
     setSession(false);
     this.authed = false;
     this.seeded = false;
-    this.hydrated = false;
+    this.cancelHydration();
     this.client.setAuth(async () => null);
     this.resetToDefault();
   }
@@ -215,7 +249,7 @@ export class ConvexStore implements Store {
       const signedOut = readSession();
       this.authed = false;
       this.seeded = false;
-      this.hydrated = false;
+      this.cancelHydration();
       this.client.setAuth(async () => null);
       if (signedOut) {
         setSession(false);
@@ -223,10 +257,19 @@ export class ConvexStore implements Store {
       }
       return;
     }
+    // Gate writes ONLY on a genuine sign-in. Clerk re-wires its token
+    // periodically (refresh), which calls this again for the *same* session —
+    // resetting the gate there would block every later write, and because the
+    // subscription only re-fires on a changed result, it could stay blocked
+    // forever. Those unsent edits then get wiped by the next server snapshot,
+    // which is exactly how a device's new tasks/streams vanished.
+    const wasAuthed = this.authed;
     setSession(true);
     this.authed = true;
-    this.seeded = false; // allow seeding the (possibly brand-new) account
-    this.hydrated = false; // block writes until this account's data has loaded
+    if (!wasAuthed) {
+      this.seeded = false; // allow seeding the (possibly brand-new) account
+      this.beginHydration(); // block writes until this account's data has loaded
+    }
     this.client.setAuth(getToken);
   }
 
@@ -242,9 +285,16 @@ export class ConvexStore implements Store {
     // with the just-reset empty cache. The write still lands in the local cache;
     // once the account loads, the server snapshot wins (restore), or — for a
     // brand-new/empty account — the onUpdate seed branch flushes the cache up.
-    if (!this.authed || !this.hydrated) return;
+    if (!this.authed || !this.hydrated) {
+      // Visible on purpose: a dropped write is a lost edit, and swallowing it
+      // silently is what made this class of bug so hard to see.
+      if (this.authed) console.warn("[sawa] write held: account still loading");
+      return;
+    }
     // Offline: the cache holds and Convex retries the mutation on reconnect.
-    void this.client.mutation(api.data.save, { data }).catch(() => {});
+    void this.client
+      .mutation(api.data.save, { data })
+      .catch((err) => console.warn("[sawa] sync failed", err));
   }
 
   subscribe(fn: (data: SawaData) => void): () => void {
