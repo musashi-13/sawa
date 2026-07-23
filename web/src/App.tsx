@@ -11,8 +11,10 @@ import { KeyboardHelp } from "./components/KeyboardHelp";
 import { Tutorial } from "./components/Tutorial";
 import { HistoryModal } from "./components/HistoryModal";
 import { UndoToast } from "./components/UndoToast";
+import { DevModeToast } from "./components/DevModeToast";
 import { resolveAction } from "./lib/keymap";
 import { getCardTheme } from "./lib/cardThemes";
+import { isDevModeChord, toggleDevMode } from "./lib/devMode";
 
 // Shown once per device on first use; the replay button re-opens it any time.
 const TOUR_DONE_KEY = "sawa.tour.v1.done";
@@ -107,6 +109,14 @@ export default function App({
   // App-level shortcuts. Card actions (complete/postpone/delete) live in CardStack.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      // Hidden developer-mode chord. Checked before the input guard (and before
+      // any overlay early-return) so it works from anywhere in the app.
+      if (isDevModeChord(e)) {
+        e.preventDefault();
+        toggleDevMode();
+        return;
+      }
+
       const tag = (document.activeElement?.tagName ?? "").toLowerCase();
       if (tag === "input" || tag === "textarea") return;
 
@@ -268,6 +278,7 @@ export default function App({
         onUndo={actions.undo}
         onDismiss={actions.dismissUndo}
       />
+      <DevModeToast />
     </div>
   );
 }

@@ -2,6 +2,17 @@ import type { SawaData } from "../types";
 import { seedData } from "./seed";
 import { ConvexClient } from "convex/browser";
 import { api } from "../../convex/_generated/api";
+import { devLog, isDevMode, onDevModeChange } from "../lib/devMode";
+
+/** Compact shape summary for developer-mode logs. */
+function summarize(d: SawaData) {
+  return {
+    tasks: d.tasks.length,
+    streams: d.streams.map((s) => s.name),
+    days: d.completionDays.length,
+    user: d.userName,
+  };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Storage seam.
@@ -27,6 +38,10 @@ export interface Store {
   setAuth?(getToken: TokenFetcher | null): void;
   /** Clear local state immediately on sign-out click, before the page reloads. */
   signOutReset?(): void;
+  /** Developer mode: current sync-layer state, for the console handle. */
+  debugState?(): Record<string, unknown>;
+  /** Developer mode: force a push of the local cache, bypassing the gate. */
+  forcePush?(): Promise<unknown>;
 }
 
 // Bumped v2 → v3 on the "context" → "stream" rename to reset any old-shape data.
@@ -163,16 +178,21 @@ export class ConvexStore implements Store {
         // second empty device) could overwrite real data that another device is
         // about to sync. When the cache is empty we leave the account untouched;
         // the first real write (`save`) creates it.
+        devLog("server: no document for this account", {
+          willSeed: this.authed && !this.seeded && hasContent(this.cache),
+        });
         if (this.authed && !this.seeded && hasContent(this.cache)) {
           this.seeded = true;
-          void this.client.mutation(api.data.save, { data: this.cache }).catch(
-            () => {},
-          );
+          devLog("seeding account from local cache", summarize(this.cache));
+          void this.client
+            .mutation(api.data.save, { data: this.cache })
+            .catch((err) => devLog("seed failed", err));
         }
         return;
       }
       this.seeded = true;
       const data = server as SawaData;
+      devLog("server snapshot received (overwrites local)", summarize(data));
       this.cache = data;
       writeCache(data);
       this.listeners.forEach((fn) => fn(data));
@@ -187,20 +207,24 @@ export class ConvexStore implements Store {
    *  race the gate exists to prevent. */
   private beginHydration(): void {
     this.hydrated = false;
+    devLog("hydration: waiting for this account's data (writes held)");
     if (this.hydrateTimer !== null) clearTimeout(this.hydrateTimer);
     this.hydrateTimer = setTimeout(() => {
       this.hydrated = true;
       this.hydrateTimer = null;
+      devLog("hydration: safety valve fired after 8s — writes released");
     }, 8000);
   }
 
   /** The account's data has arrived — writes may flow. */
   private markHydrated(): void {
+    const was = this.hydrated;
     this.hydrated = true;
     if (this.hydrateTimer !== null) {
       clearTimeout(this.hydrateTimer);
       this.hydrateTimer = null;
     }
+    if (!was) devLog("hydration: complete — writes released");
   }
 
   /** Sign-out: close the gate and drop any pending safety valve. */
@@ -264,6 +288,11 @@ export class ConvexStore implements Store {
     // forever. Those unsent edits then get wiped by the next server snapshot,
     // which is exactly how a device's new tasks/streams vanished.
     const wasAuthed = this.authed;
+    devLog(
+      wasAuthed
+        ? "auth: token re-wired (same session — write gate left open)"
+        : "auth: signed in",
+    );
     setSession(true);
     this.authed = true;
     if (!wasAuthed) {
@@ -271,6 +300,34 @@ export class ConvexStore implements Store {
       this.beginHydration(); // block writes until this account's data has loaded
     }
     this.client.setAuth(getToken);
+  }
+
+  /** Developer-mode snapshot of the sync layer's internal state. */
+  debugState(): Record<string, unknown> {
+    return {
+      authed: this.authed,
+      hydrated: this.hydrated,
+      writesFlowing: this.authed && this.hydrated,
+      seeded: this.seeded,
+      hydrationPending: this.hydrateTimer !== null,
+      cache: summarize(this.cache),
+    };
+  }
+
+  /** Developer-mode escape hatch: push the current cache to the server now,
+   *  bypassing the hydration gate. Returns a promise so it can be awaited. */
+  forcePush(): Promise<unknown> {
+    devLog("forcePush → server", summarize(this.cache));
+    return this.client
+      .mutation(api.data.save, { data: this.cache })
+      .then((r) => {
+        devLog("forcePush ok");
+        return r;
+      })
+      .catch((err) => {
+        devLog("forcePush FAILED", err);
+        throw err;
+      });
   }
 
   load(): SawaData {
@@ -288,13 +345,23 @@ export class ConvexStore implements Store {
     if (!this.authed || !this.hydrated) {
       // Visible on purpose: a dropped write is a lost edit, and swallowing it
       // silently is what made this class of bug so hard to see.
-      if (this.authed) console.warn("[sawa] write held: account still loading");
+      if (this.authed) {
+        console.warn("[sawa] write held: account still loading");
+        devLog("write HELD (not hydrated)", summarize(data));
+      } else {
+        devLog("write local-only (signed out)", summarize(data));
+      }
       return;
     }
+    devLog("push → server", summarize(data));
     // Offline: the cache holds and Convex retries the mutation on reconnect.
     void this.client
       .mutation(api.data.save, { data })
-      .catch((err) => console.warn("[sawa] sync failed", err));
+      .then(() => devLog("push ok"))
+      .catch((err) => {
+        console.warn("[sawa] sync failed", err);
+        devLog("push FAILED", err);
+      });
   }
 
   subscribe(fn: (data: SawaData) => void): () => void {
@@ -310,3 +377,28 @@ const CONVEX_URL = import.meta.env.VITE_CONVEX_URL as string | undefined;
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
 export const store: Store =
   CONVEX_URL && CLERK_KEY ? new ConvexStore(CONVEX_URL) : new LocalStore();
+
+// Developer mode attaches a console handle. Kept out of the app's own code
+// paths — nothing in the UI depends on it, and it disappears when toggled off.
+if (typeof window !== "undefined") {
+  const attach = (on: boolean) => {
+    const w = window as unknown as Record<string, unknown>;
+    if (!on) {
+      delete w.__sawa;
+      return;
+    }
+    w.__sawa = {
+      /** Current local data (what the UI is rendering). */
+      data: () => store.load(),
+      /** Sync-layer internals: authed / hydrated / whether writes flow. */
+      state: () => store.debugState?.() ?? { store: "local-only" },
+      /** Force-push the local cache to the server, bypassing the write gate. */
+      push: () => store.forcePush?.() ?? Promise.resolve("local-only store"),
+      /** Backend mode in use. */
+      backend: CONVEX_URL && CLERK_KEY ? "convex" : "local",
+    };
+    devLog("developer mode on — try __sawa.state(), __sawa.data(), __sawa.push()");
+  };
+  attach(isDevMode());
+  onDevModeChange(attach);
+}
