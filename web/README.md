@@ -61,6 +61,30 @@ change how aggressively each signal surfaces. `reindex` writes the result into a
 persisted, synced `order` on each task; the UI only reads `order`
 (`orderedByQueue`), so you can rewrite the scoring freely.
 
+## Developer mode (hidden)
+
+**`Ctrl` + `Shift` + `Alt` + `D`** toggles it from anywhere in the app (macOS:
+`Control` + `Option` + `Shift` + `D`). Three modifiers so it can't be hit by
+accident, and it dodges every browser binding — `Ctrl+Shift+I/J/C/K` (devtools),
+`+D` (bookmark all tabs), `+P` (private window), `+N` (incognito), `+T` (reopen
+tab). Matched on `event.code`, so it still works on macOS where `Option+D`
+reports `∂`. A toast confirms both on and off; the choice persists per device.
+
+Defined in `src/lib/devMode.ts` (`isDevModeChord`, `toggleDevMode`, `devLog`).
+It logs the sync layer's behaviour to the console and attaches `window.__sawa`:
+
+| Call | What it does |
+| --- | --- |
+| `__sawa.state()` | `authed`, `hydrated`, `writesFlowing`, `seeded`, cache summary |
+| `__sawa.data()` | The local data the UI is currently rendering |
+| `__sawa.push()` | Force-push the local cache, bypassing the hydration gate |
+| `__sawa.backend` | `convex` or `local` |
+
+The logs to watch: `push → server` / `push ok` (a write synced), `write HELD`
+(a write was **not** sent — the account hadn't loaded), `server snapshot
+received (overwrites local)`, and `hydration: …`. `writesFlowing: false` is the
+first thing to check when syncing looks broken.
+
 ## Moving to cross-device sync later
 
 Everything talks to the `Store` interface in `src/store/store.ts`. To sync
