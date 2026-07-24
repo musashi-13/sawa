@@ -208,7 +208,7 @@ export function StreamManagerModal({
           }}
         >
           <motion.div
-            className="border-border-warm max-h-full w-full max-w-[420px] overflow-y-auto rounded-t-3xl border bg-[#211e1b] p-5 sm:rounded-3xl"
+            className="border-border-warm max-h-[80vh] w-full max-w-[420px] overflow-y-auto rounded-t-3xl border bg-[#211e1b] p-5 sm:rounded-3xl"
             initial={{ y: 40, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 40, opacity: 0 }}

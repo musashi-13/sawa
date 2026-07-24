@@ -8,8 +8,8 @@ import { dayKey, now } from "../lib/util";
 // ─────────────────────────────────────────────────────────────────────────────
 // History — a read-only log of finished tasks (completed + missed) across every
 // stream. No new data: completed tasks keep their record in the blob and missed
-// ones are derived via `isFailed`. Two sorts — by when it happened (completed /
-// missed date) or by when it was created — each list sectioned by day.
+// ones are derived via `isFailed`. Two sorts — by when it happened (finished /
+// missed date) or by when it was added — each list sectioned by day.
 // ─────────────────────────────────────────────────────────────────────────────
 
 type SortMode = "completed" | "created";
@@ -131,7 +131,7 @@ export function HistoryModal({ open, onClose, tasks, streams }: HistoryModalProp
                         color: on ? "#d9b877" : "#8C8270",
                       }}
                     >
-                      {m === "completed" ? "Completed" : "Created"}
+                      {m === "completed" ? "Finished" : "Added"}
                     </button>
                   );
                 })}

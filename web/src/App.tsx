@@ -15,6 +15,7 @@ import { DevModeToast } from "./components/DevModeToast";
 import { resolveAction } from "./lib/keymap";
 import { getCardTheme } from "./lib/cardThemes";
 import { isDevModeChord, toggleDevMode } from "./lib/devMode";
+import { isFailed } from "./lib/ranking";
 
 // Shown once per device on first use; the replay button re-opens it any time.
 const TOUR_DONE_KEY = "sawa.tour.v1.done";
@@ -99,10 +100,15 @@ export default function App({
   const overlayOpen = modal.open || help || manage || tour || historyOpen;
   const { nextStream, prevStream, moveActiveStream, undo } = actions;
 
-  // Task count per stream, for the manage sheet's delete confirmation.
+  // Active-task count per stream, for the manage sheet. Only tasks still in the
+  // stack count — completed and failed ones have left it, so surfacing them here
+  // would just be a lifetime total nobody's asking for.
   const taskCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const t of data.tasks) counts[t.streamId] = (counts[t.streamId] ?? 0) + 1;
+    for (const t of data.tasks) {
+      if (t.completedAt !== undefined || isFailed(t)) continue;
+      counts[t.streamId] = (counts[t.streamId] ?? 0) + 1;
+    }
     return counts;
   }, [data.tasks]);
 
